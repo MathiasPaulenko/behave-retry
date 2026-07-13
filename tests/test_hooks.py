@@ -1,0 +1,122 @@
+"""Tests for hooks: setup_retry, after_scenario_hook, retry_report."""
+
+from __future__ import annotations
+
+from behave_retry import setup_retry, after_scenario_hook, retry_report, RetryConfig
+from behave_retry.hooks import parse_retry_tag
+
+
+class FakeScenario:
+    """Mimics behave.model.Scenario."""
+
+    def __init__(self, name: str, tags: list[str] | None = None, status: str = "failed"):
+        self.name = name
+        self.tags = tags or []
+        self.status = status
+
+
+class FakeContext:
+    """Mimics behave context."""
+
+    def __init__(self):
+        pass
+
+
+class TestSetupRetry:
+    def test_basic_setup(self):
+        ctx = FakeContext()
+        setup_retry(ctx, max_retries=3)
+        assert isinstance(ctx._behave_retry_config, RetryConfig)
+        assert ctx._behave_retry_config.max_retries == 3
+        assert hasattr(ctx, "_behave_retry_stats")
+        assert hasattr(ctx, "_behave_retry_attempts")
+
+    def test_with_tags(self):
+        ctx = FakeContext()
+        setup_retry(ctx, max_retries=3, retry_tags=["@flaky"])
+        assert ctx._behave_retry_config.retry_tags == ["@flaky"]
+
+    def test_with_exceptions(self):
+        ctx = FakeContext()
+        setup_retry(ctx, max_retries=3, retry_on=[AssertionError])
+        assert ctx._behave_retry_config.retry_on == [AssertionError]
+
+    def test_idempotent(self):
+        ctx = FakeContext()
+        setup_retry(ctx, max_retries=3)
+        setup_retry(ctx, max_retries=5)
+        assert ctx._behave_retry_config.max_retries == 5
+
+
+class TestAfterScenarioHook:
+    def test_no_config_does_nothing(self):
+        ctx = FakeContext()
+        scenario = FakeScenario("Login", status="failed")
+        after_scenario_hook(ctx, scenario)
+
+    def test_passed_first_time_no_stats(self):
+        ctx = FakeContext()
+        setup_retry(ctx, max_retries=3)
+        scenario = FakeScenario("Login", status="passed")
+        after_scenario_hook(ctx, scenario)
+        assert len(ctx._behave_retry_stats.scenarios_retried) == 0
+
+    def test_failed_records_retry(self):
+        ctx = FakeContext()
+        setup_retry(ctx, max_retries=3)
+        scenario = FakeScenario("Login", status="failed")
+        after_scenario_hook(ctx, scenario)
+        assert len(ctx._behave_retry_stats.scenarios_retried) == 1
+        assert ctx._behave_retry_attempts["Login"] == 1
+
+    def test_retry_tag_override_zero(self):
+        ctx = FakeContext()
+        setup_retry(ctx, max_retries=3)
+        scenario = FakeScenario("Login", tags=["@retry:0"], status="failed")
+        after_scenario_hook(ctx, scenario)
+        assert len(ctx._behave_retry_stats.scenarios_retried) == 0
+
+    def test_multiple_attempts(self):
+        ctx = FakeContext()
+        setup_retry(ctx, max_retries=3)
+        scenario = FakeScenario("Login", status="failed")
+        after_scenario_hook(ctx, scenario)
+        after_scenario_hook(ctx, scenario)
+        after_scenario_hook(ctx, scenario)
+        assert ctx._behave_retry_attempts["Login"] == 3
+        assert len(ctx._behave_retry_stats.scenarios_retried) == 3
+
+
+class TestRetryReport:
+    def test_not_configured(self):
+        ctx = FakeContext()
+        report = retry_report(ctx)
+        assert "not configured" in report
+
+    def test_no_retries(self):
+        ctx = FakeContext()
+        setup_retry(ctx, max_retries=3)
+        report = retry_report(ctx)
+        assert "No retries" in report
+
+    def test_with_retries(self):
+        ctx = FakeContext()
+        setup_retry(ctx, max_retries=3)
+        ctx._behave_retry_stats.add_retry("Login", attempts=2, final_status="passed")
+        report = retry_report(ctx)
+        assert "Login" in report
+        assert "passed" in report
+
+
+class TestParseRetryTag:
+    def test_valid_tag(self):
+        assert parse_retry_tag(["@retry:3"]) == 3
+        assert parse_retry_tag(["@smoke", "@retry:5"]) == 5
+
+    def test_no_tag(self):
+        assert parse_retry_tag(["@smoke"]) is None
+        assert parse_retry_tag([]) is None
+
+    def test_invalid_tag(self):
+        assert parse_retry_tag(["@retry:abc"]) is None
+        assert parse_retry_tag(["@retry:"]) is None
