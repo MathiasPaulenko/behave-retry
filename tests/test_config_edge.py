@@ -184,3 +184,40 @@ class TestParseRetryTagEdge:
 
     def test_valid_tag_not_first(self):
         assert parse_retry_tag(["@smoke", "@regression", "@retry:2"]) == 2
+
+
+class TestGetRetryDelay:
+    def test_zero_delay_returns_zero(self):
+        config = RetryConfig(max_retries=3, retry_delay=0.0)
+        assert config.get_retry_delay(1) == 0.0
+        assert config.get_retry_delay(5) == 0.0
+
+    def test_base_delay_no_backoff(self):
+        config = RetryConfig(max_retries=3, retry_delay=2.0, backoff_factor=1.0)
+        assert config.get_retry_delay(1) == 2.0
+        assert config.get_retry_delay(2) == 2.0
+        assert config.get_retry_delay(3) == 2.0
+
+    def test_delay_with_backoff(self):
+        config = RetryConfig(max_retries=3, retry_delay=1.0, backoff_factor=2.0)
+        assert config.get_retry_delay(1) == 1.0
+        assert config.get_retry_delay(2) == 2.0
+        assert config.get_retry_delay(3) == 4.0
+        assert config.get_retry_delay(4) == 8.0
+
+    def test_delay_with_fractional_backoff(self):
+        config = RetryConfig(max_retries=3, retry_delay=0.5, backoff_factor=1.5)
+        assert config.get_retry_delay(1) == 0.5
+        assert config.get_retry_delay(2) == 0.75
+        assert config.get_retry_delay(3) == 1.125
+
+    def test_delay_zero_with_backoff_returns_zero(self):
+        config = RetryConfig(max_retries=3, retry_delay=0.0, backoff_factor=2.0)
+        assert config.get_retry_delay(1) == 0.0
+        assert config.get_retry_delay(10) == 0.0
+
+    def test_delay_large_backoff_factor(self):
+        config = RetryConfig(max_retries=3, retry_delay=0.1, backoff_factor=10.0)
+        assert config.get_retry_delay(1) == 0.1
+        assert config.get_retry_delay(2) == 1.0
+        assert config.get_retry_delay(3) == 10.0

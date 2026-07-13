@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.0] - 2026-07-13
+
+### Added
+
+- `py.typed` marker file for PEP 561 type-checker support
+- `force-include` in `pyproject.toml` to ensure `py.typed` is packaged in the wheel
+- `retry_delay` and `backoff_factor` parameters to `RetryConfig` and `setup_retry` — configurable delay between retries with exponential backoff
+- `RetryConfig.get_retry_delay(attempt)` method — calculates the delay for a given retry attempt number
+- Validation for `retry_delay` (must be >= 0) and `backoff_factor` (must be >= 1.0) in `RetryConfig.__post_init__`
+- 10 new tests: 6 for `get_retry_delay` (zero, fixed, backoff, fractional, large factor, zero-with-backoff), 4 for `patched_run` delay behavior (no-delay, fixed, backoff, delay-only-before-retry)
+
 ## [1.2.0] - 2026-07-13
 
 ### Added

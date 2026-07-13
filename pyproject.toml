@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "behave-retry"
-version = "1.2.0"
+version = "1.3.0"
 description = "Automatic retry for failed Behave scenarios — tag overrides, exception filtering, flakiness stats"
 readme = "README.md"
 license = "MIT"
@@ -42,6 +42,9 @@ Changelog = "https://github.com/MathiasPaulenko/behave-retry/blob/main/CHANGELOG
 
 [tool.hatch.build.targets.wheel]
 packages = ["behave_retry"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"behave_retry/py.typed" = "behave_retry/py.typed"
 
 [tool.ruff]
 target-version = "py311"

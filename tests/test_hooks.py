@@ -76,11 +76,30 @@ class TestSetupRetry:
         setup_retry(ctx, max_retries=3, retry_on=[AssertionError])
         assert ctx._behave_retry_config.retry_on == [AssertionError]
 
+    def test_with_delay_and_backoff(self):
+        ctx = FakeContext()
+        setup_retry(ctx, max_retries=3, retry_delay=2.0, backoff_factor=2.0)
+        assert ctx._behave_retry_config.retry_delay == 2.0
+        assert ctx._behave_retry_config.backoff_factor == 2.0
+
+    def test_delay_defaults(self):
+        ctx = FakeContext()
+        setup_retry(ctx, max_retries=3)
+        assert ctx._behave_retry_config.retry_delay == 0.0
+        assert ctx._behave_retry_config.backoff_factor == 1.0
+
     def test_idempotent(self):
         ctx = FakeContext()
         setup_retry(ctx, max_retries=3)
         setup_retry(ctx, max_retries=5)
         assert ctx._behave_retry_config.max_retries == 5
+
+    def test_repatch_updates_delay(self):
+        ctx = FakeContext()
+        setup_retry(ctx, max_retries=3, retry_delay=1.0)
+        setup_retry(ctx, max_retries=5, retry_delay=5.0, backoff_factor=3.0)
+        assert ctx._behave_retry_config.retry_delay == 5.0
+        assert ctx._behave_retry_config.backoff_factor == 3.0
 
 
 class TestAfterScenarioHook:
@@ -462,3 +481,116 @@ class TestPatchScenarioRun:
 
         assert result is False
         assert len(ctx._behave_retry_stats.scenarios_retried) == 0
+
+
+class TestRetryDelay:
+    """Test that time.sleep is called with correct delays between retries."""
+
+    def test_no_delay_no_sleep_call(self):
+        from unittest.mock import patch
+
+        ctx = FakeContext()
+        setup_retry(ctx, max_retries=2)
+
+        call_count = 0
+
+        def fake_original_run(self, runner):
+            nonlocal call_count
+            call_count += 1
+            self.status = "failed"
+            return True
+
+        with (
+            patch("behave.model.Scenario") as mock_scenario,
+            patch("behave_retry.hooks.time.sleep") as mock_sleep,
+        ):
+            mock_scenario.run = staticmethod(fake_original_run)
+            _patch_scenario_run(ctx)
+
+            s = FakeScenario("Login", status="failed")
+            mock_scenario.run(s, FakeRunner())
+
+        mock_sleep.assert_not_called()
+
+    def test_fixed_delay_between_retries(self):
+        from unittest.mock import patch
+
+        ctx = FakeContext()
+        setup_retry(ctx, max_retries=2, retry_delay=1.0, backoff_factor=1.0)
+
+        call_count = 0
+
+        def fake_original_run(self, runner):
+            nonlocal call_count
+            call_count += 1
+            self.status = "failed"
+            return True
+
+        with (
+            patch("behave.model.Scenario") as mock_scenario,
+            patch("behave_retry.hooks.time.sleep") as mock_sleep,
+        ):
+            mock_scenario.run = staticmethod(fake_original_run)
+            _patch_scenario_run(ctx)
+
+            s = FakeScenario("Login", status="failed")
+            mock_scenario.run(s, FakeRunner())
+
+        sleep_calls = [c.args[0] for c in mock_sleep.call_args_list]
+        assert sleep_calls == [1.0, 1.0]
+
+    def test_backoff_delay_between_retries(self):
+        from unittest.mock import patch
+
+        ctx = FakeContext()
+        setup_retry(ctx, max_retries=3, retry_delay=0.5, backoff_factor=2.0)
+
+        call_count = 0
+
+        def fake_original_run(self, runner):
+            nonlocal call_count
+            call_count += 1
+            self.status = "failed"
+            return True
+
+        with (
+            patch("behave.model.Scenario") as mock_scenario,
+            patch("behave_retry.hooks.time.sleep") as mock_sleep,
+        ):
+            mock_scenario.run = staticmethod(fake_original_run)
+            _patch_scenario_run(ctx)
+
+            s = FakeScenario("Login", status="failed")
+            mock_scenario.run(s, FakeRunner())
+
+        sleep_calls = [c.args[0] for c in mock_sleep.call_args_list]
+        assert sleep_calls == [0.5, 1.0, 2.0]
+
+    def test_delay_only_before_retry_not_after_pass(self):
+        from unittest.mock import patch
+
+        ctx = FakeContext()
+        setup_retry(ctx, max_retries=3, retry_delay=2.0)
+
+        call_count = 0
+
+        def fake_original_run(self, runner):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                self.status = "failed"
+                return True
+            self.status = "passed"
+            return False
+
+        with (
+            patch("behave.model.Scenario") as mock_scenario,
+            patch("behave_retry.hooks.time.sleep") as mock_sleep,
+        ):
+            mock_scenario.run = staticmethod(fake_original_run)
+            _patch_scenario_run(ctx)
+
+            s = FakeScenario("Login", status="failed")
+            mock_scenario.run(s, FakeRunner())
+
+        mock_sleep.assert_called_once_with(2.0)

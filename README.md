@@ -24,6 +24,7 @@ Behave has no built-in retry. When a scenario fails due to flakiness (timing, ne
   - [Exception-filtered retry](#exception-filtered-retry)
   - [Per-scenario override](#per-scenario-override)
   - [Retry stats](#retry-stats)
+  - [Retry delay and backoff](#retry-delay-and-backoff)
 - [API reference](#api-reference)
 - [Configuration](#configuration)
 - [Examples](#examples)
@@ -137,9 +138,24 @@ Retry Summary:
   - "Checkout flow" — 2 attempts, passed
 ```
 
+### Retry delay and backoff
+
+Add a configurable delay between retries, with optional exponential backoff:
+
+```python
+setup_retry(
+    context,
+    max_retries=3,
+    retry_delay=2.0,
+    backoff_factor=2.0,
+)
+```
+
+With `retry_delay=2.0` and `backoff_factor=2.0`, delays between retries are 2s, 4s, 8s. With `backoff_factor=1.0` (default), the delay is fixed at `retry_delay` seconds.
+
 ## API reference
 
-### `setup_retry(context, max_retries=0, retry_tags=None, retry_on=None)`
+### `setup_retry(context, max_retries=0, retry_tags=None, retry_on=None, retry_delay=0.0, backoff_factor=1.0)`
 
 Configure retry on the behave context. Call this in `before_all`. This patches `behave.model.Scenario.run` to re-execute failed scenarios automatically.
 
@@ -149,6 +165,8 @@ Configure retry on the behave context. Call this in `before_all`. This patches `
 | `max_retries` | `int` | `0` | Maximum retries per scenario (0 = no retry) |
 | `retry_tags` | `list[str] \| None` | `None` | Only retry scenarios with these tags |
 | `retry_on` | `list[type[Exception]] \| None` | `None` | Only retry on these exception types |
+| `retry_delay` | `float` | `0.0` | Seconds to wait before each retry (0 = no delay) |
+| `backoff_factor` | `float` | `1.0` | Multiplier applied to `retry_delay` after each retry (must be >= 1.0) |
 
 ### `after_scenario_hook(context, scenario)`
 
@@ -167,12 +185,15 @@ Frozen dataclass for configuration.
 | `max_retries` | `int` | `0` | Maximum retries per scenario (must be >= 0) |
 | `retry_tags` | `list[str]` | `[]` | Tag filter (empty = retry all) |
 | `retry_on` | `list[type[Exception]]` | `[]` | Exception filter (empty = retry on any) |
+| `retry_delay` | `float` | `0.0` | Seconds to wait before each retry (must be >= 0) |
+| `backoff_factor` | `float` | `1.0` | Multiplier applied to `retry_delay` (must be >= 1.0) |
 
 Methods:
 
 - `should_retry_tag(tags) -> bool` — Check if scenario tags allow retry
 - `should_retry_exception(exc) -> bool` — Check if exception type allows retry
 - `get_scenario_retries(tags) -> int` — Get max retries for a scenario, checking `@retry:N` override
+- `get_retry_delay(attempt) -> float` — Calculate delay for a given retry attempt (1-based)
 
 ### `RetryStats`
 
@@ -255,6 +276,8 @@ def before_all(context):
         max_retries=3,
         retry_tags=["@flaky"],
         retry_on=[AssertionError, TimeoutError],
+        retry_delay=2.0,
+        backoff_factor=2.0,
     )
 
 def after_scenario(context, scenario):

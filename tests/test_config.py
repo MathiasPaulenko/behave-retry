@@ -11,12 +11,26 @@ class TestRetryConfigDefaults:
         assert config.max_retries == 0
         assert config.retry_tags == []
         assert config.retry_on == []
+        assert config.retry_delay == 0.0
+        assert config.backoff_factor == 1.0
 
     def test_negative_max_retries_raises(self):
         import pytest
 
         with pytest.raises(ValueError, match="max_retries must be >= 0"):
             RetryConfig(max_retries=-1)
+
+    def test_negative_retry_delay_raises(self):
+        import pytest
+
+        with pytest.raises(ValueError, match="retry_delay must be >= 0"):
+            RetryConfig(retry_delay=-1.0)
+
+    def test_backoff_factor_below_one_raises(self):
+        import pytest
+
+        with pytest.raises(ValueError, match="backoff_factor must be >= 1.0"):
+            RetryConfig(backoff_factor=0.5)
 
     def test_frozen(self):
         config = RetryConfig(max_retries=3)

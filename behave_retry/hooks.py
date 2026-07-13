@@ -14,6 +14,7 @@ The user-facing API is:
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from .config import RetryConfig, parse_retry_tag
@@ -282,6 +283,10 @@ def _patch_scenario_run(context: Any) -> None:
                 )
                 return True
 
+            delay = config.get_retry_delay(attempt)
+            if delay > 0:
+                time.sleep(delay)
+
             _reset_scenario_state(self)
 
     Scenario.run = patched_run
@@ -297,6 +302,8 @@ def setup_retry(
     max_retries: int = 0,
     retry_tags: list[str] | None = None,
     retry_on: list[type[Exception]] | None = None,
+    retry_delay: float = 0.0,
+    backoff_factor: float = 1.0,
 ) -> None:
     """Configure retry on the behave context.
 
@@ -310,11 +317,16 @@ def setup_retry(
         max_retries: Maximum retries per scenario (0 = no retry).
         retry_tags: Only retry scenarios with these tags.
         retry_on: Only retry on these exception types.
+        retry_delay: Seconds to wait before each retry (0 = no delay).
+        backoff_factor: Multiplier applied to ``retry_delay`` after each
+            retry. Must be >= 1.0.
     """
     config = RetryConfig(
         max_retries=max_retries,
         retry_tags=retry_tags or [],
         retry_on=retry_on or [],
+        retry_delay=retry_delay,
+        backoff_factor=backoff_factor,
     )
 
     context._behave_retry_config = config

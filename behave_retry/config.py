@@ -39,20 +39,50 @@ class RetryConfig:
         max_retries: Maximum number of retries per scenario (0 = no retry).
         retry_tags: Only retry scenarios with these tags. Empty = retry all.
         retry_on: Only retry on these exception types. Empty = retry on any.
+        retry_delay: Seconds to wait before each retry (0 = no delay).
+        backoff_factor: Multiplier applied to ``retry_delay`` after each retry.
+            Must be >= 1.0. With ``retry_delay=2.0`` and ``backoff_factor=2.0``,
+            delays are 2s, 4s, 8s, ...
     """
 
     max_retries: int = 0
     retry_tags: list[str] = field(default_factory=list)
     retry_on: list[type[Exception]] = field(default_factory=list)
+    retry_delay: float = 0.0
+    backoff_factor: float = 1.0
 
     def __post_init__(self) -> None:
         """Validate configuration after initialization.
 
         Raises:
-            ValueError: If ``max_retries`` is negative.
+            ValueError: If ``max_retries`` is negative, ``retry_delay`` is
+                negative, or ``backoff_factor`` is less than 1.0.
         """
         if self.max_retries < 0:
             raise ValueError(f"max_retries must be >= 0, got {self.max_retries}")
+        if self.retry_delay < 0:
+            raise ValueError(f"retry_delay must be >= 0, got {self.retry_delay}")
+        if self.backoff_factor < 1.0:
+            raise ValueError(
+                f"backoff_factor must be >= 1.0, got {self.backoff_factor}"
+            )
+
+    def get_retry_delay(self, attempt: int) -> float:
+        """Calculate the delay before the next retry for a given attempt.
+
+        The delay is ``retry_delay * (backoff_factor ** (attempt - 1))``.
+        For the first retry (attempt=1) the base ``retry_delay`` is used.
+        Subsequent retries multiply by ``backoff_factor`` each time.
+
+        Args:
+            attempt: The retry attempt number (1-based).
+
+        Returns:
+            The delay in seconds. Returns 0.0 if ``retry_delay`` is 0.
+        """
+        if self.retry_delay == 0.0:
+            return 0.0
+        return self.retry_delay * (self.backoff_factor ** (attempt - 1))
 
     def should_retry_tag(self, tags: list[str]) -> bool:
         """Check if scenario tags allow retry.
