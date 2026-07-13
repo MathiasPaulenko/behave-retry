@@ -1,10 +1,35 @@
 # behave-retry
 
-Automatic retry for failed Behave scenarios.
+[![CI](https://github.com/MathiasPaulenko/behave-retry/actions/workflows/ci.yml/badge.svg)](https://github.com/MathiasPaulenko/behave-retry/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/behave-retry)](https://pypi.org/project/behave-retry/)
+[![Python](https://img.shields.io/pypi/pyversions/behave-retry)](https://pypi.org/project/behave-retry/)
+[![License](https://img.shields.io/pypi/l/behave-retry)](https://github.com/MathiasPaulenko/behave-retry/blob/main/LICENSE)
+[![Coverage](https://img.shields.io/badge/coverage-%3E90%25-brightgreen)](https://github.com/MathiasPaulenko/behave-retry)
+
+Automatic retry for failed [Behave](https://github.com/behave/behave) scenarios — CLI flags, tag overrides, exception filtering, and flakiness stats.
 
 ## Why?
 
 Behave has no built-in retry. When a scenario fails due to flakiness (timing, network, race conditions), there's no way to re-run it automatically. Cucumber has `--retry` natively. Behave doesn't.
+
+**behave-retry** fills that gap with a lightweight, zero-dependency library that integrates through Behave's hook system.
+
+## Table of contents
+
+- [Install](#install)
+- [Quick start](#quick-start)
+- [Features](#features)
+  - [Global retry](#global-retry)
+  - [Tag-filtered retry](#tag-filtered-retry)
+  - [Exception-filtered retry](#exception-filtered-retry)
+  - [Per-scenario override](#per-scenario-override)
+  - [Cleanup between retries](#cleanup-between-retries)
+  - [Retry stats](#retry-stats)
+- [API reference](#api-reference)
+- [Configuration](#configuration)
+- [Examples](#examples)
+- [Contributing](#contributing)
+- [License](#license)
 
 ## Install
 
@@ -12,11 +37,17 @@ Behave has no built-in retry. When a scenario fails due to flakiness (timing, ne
 pip install behave-retry
 ```
 
+For development:
+
+```bash
+pip install -e ".[dev]"
+```
+
 ## Quick start
 
 ```python
 # environment.py
-from behave_retry import setup_retry, after_scenario_hook
+from behave_retry import setup_retry, after_scenario_hook, retry_report
 
 def before_all(context):
     setup_retry(context, max_retries=3)
@@ -25,37 +56,51 @@ def after_scenario(context, scenario):
     after_scenario_hook(context, scenario)
 
 def after_all(context):
-    from behave_retry import retry_report
     print(retry_report(context))
 ```
+
+That's it. Failed scenarios will now be retried up to 3 times automatically.
 
 ## Features
 
 ### Global retry
 
-```bash
-behave --retry 3
+```python
+setup_retry(context, max_retries=3)
 ```
 
 Retry every failed scenario up to 3 times.
 
 ### Tag-filtered retry
 
-```bash
-behave --retry 3 --retry-tags @flaky
+```python
+setup_retry(context, max_retries=3, retry_tags=["@flaky"])
 ```
 
 Only retry scenarios tagged with `@flaky`.
 
-### Exception-filtered retry
-
-```bash
-behave --retry 3 --retry-on AssertionError --retry-on TimeoutError
+```gherkin
+@flaky
+Scenario: Login with slow network
+  Given the server is slow
+  ...
 ```
 
-Only retry when the scenario fails with specific exception types.
+### Exception-filtered retry
+
+```python
+setup_retry(
+    context,
+    max_retries=3,
+    retry_on=[AssertionError, TimeoutError],
+)
+```
+
+Only retry when the scenario fails with specific exception types. Subclasses of the listed exceptions also match.
 
 ### Per-scenario override
+
+Override the global retry count per scenario using the `@retry:N` tag:
 
 ```gherkin
 @retry:5
@@ -67,7 +112,11 @@ Scenario: Never retry this
   ...
 ```
 
+The first `@retry:N` tag wins. `@retry:0` disables retry for that scenario.
+
 ### Cleanup between retries
+
+Define an `after_retry` hook in your `environment.py` to clean up state between retry attempts:
 
 ```python
 # environment.py
@@ -85,29 +134,163 @@ from behave_retry import retry_report
 def after_all(context):
     report = retry_report(context)
     print(report)
-    # Retry Summary:
-    #   Total retries: 5
-    #   Scenarios retried: 3
-    #   Passed on retry: 2
-    #   Failed after retry: 1
-    #   - "Login with invalid credentials" — 3 attempts, failed (AssertionError)
-    #   - "Search products" — 2 attempts, passed
-    #   - "Checkout flow" — 1 attempt, passed
 ```
 
-## API
+Output:
 
-| Function | Description |
+```text
+Retry Summary:
+  Total retries: 5
+  Scenarios retried: 3
+  Passed on retry: 2
+  Failed after retry: 1
+
+  - "Login with invalid credentials" — 3 attempts, failed (AssertionError)
+  - "Search products" — 2 attempts, passed
+  - "Checkout flow" — 1 attempt, passed
+```
+
+## API reference
+
+### `setup_retry(context, max_retries=0, retry_tags=None, retry_on=None)`
+
+Configure retry on the behave context. Call this in `before_all`.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `context` | `Any` | — | Behave context object |
+| `max_retries` | `int` | `0` | Maximum retries per scenario (0 = no retry) |
+| `retry_tags` | `list[str] \| None` | `None` | Only retry scenarios with these tags |
+| `retry_on` | `list[type[Exception]] \| None` | `None` | Only retry on these exception types |
+
+### `after_scenario_hook(context, scenario)`
+
+Handle retry logic. Call this in `after_scenario`.
+
+### `retry_report(context) -> str`
+
+Get a human-readable retry summary. Call this in `after_all`.
+
+### `RetryConfig`
+
+Dataclass for configuration.
+
+| Attribute | Type | Default | Description |
+|---|---|---|---|
+| `max_retries` | `int` | `0` | Maximum retries per scenario |
+| `retry_tags` | `list[str]` | `[]` | Tag filter (empty = retry all) |
+| `retry_on` | `list[type[Exception]]` | `[]` | Exception filter (empty = retry on any) |
+
+Methods:
+
+- `should_retry_tag(tags) -> bool` — Check if scenario tags allow retry
+- `should_retry_exception(exc) -> bool` — Check if exception type allows retry
+- `get_scenario_retries(tags) -> int` — Get max retries for a scenario, checking `@retry:N` override
+
+### `RetryStats`
+
+Aggregate retry statistics.
+
+| Property | Type | Description |
+|---|---|---|
+| `total_retries` | `int` | Total retry attempts across all scenarios |
+| `scenarios_retried` | `list[ScenarioRetry]` | Per-scenario retry records |
+| `scenarios_passed_on_retry` | `int` | Scenarios that passed after retry |
+| `scenarios_failed_after_retry` | `int` | Scenarios that still failed after retry |
+
+### `ScenarioRetry`
+
+Record of retry attempts for a single scenario.
+
+| Attribute | Type | Description |
+|---|---|---|
+| `scenario` | `str` | Scenario name |
+| `attempts` | `int` | Total attempts (including first run) |
+| `final_status` | `str` | `"passed"` or `"failed"` |
+| `exceptions` | `list[str]` | Exception types encountered |
+
+| Property | Description |
 |---|---|
-| `setup_retry(context, max_retries, retry_tags, retry_on)` | Configure retry in `before_all` |
-| `after_scenario_hook(context, scenario)` | Call in `after_scenario` to handle retry logic |
-| `retry_report(context)` | Get human-readable retry summary |
-| `RetryStats` | Dataclass with retry statistics |
+| `was_retried` | True if retried at least once |
+| `passed_on_retry` | True if passed after retry |
 
-## Zero dependencies
+### `RetryExhaustedError`
 
-`behave-retry` has no required dependencies beyond behave itself.
+Raised when a scenario has been retried the maximum number of times.
+
+### `parse_retry_tag(tags) -> int | None`
+
+Parse `@retry:N` tag from scenario tags. Returns `N` if found, `None` otherwise.
+
+## Configuration
+
+### Python version
+
+behave-retry requires **Python 3.11+**.
+
+### Dependencies
+
+Zero required dependencies. `behave` is only needed as a dev dependency for running tests.
+
+### Linting and formatting
+
+The project uses [Ruff](https://github.com/astral-sh/ruff) with the following rule sets: `E`, `F`, `W`, `I`, `N`, `UP`, `B`, `SIM`.
+
+```bash
+ruff check .
+```
+
+### Testing
+
+```bash
+pytest tests/ -v --cov
+```
+
+Coverage threshold is 90%.
+
+## Examples
+
+### Full environment.py
+
+```python
+from behave_retry import setup_retry, after_scenario_hook, retry_report
+
+def before_all(context):
+    setup_retry(
+        context,
+        max_retries=3,
+        retry_tags=["@flaky"],
+        retry_on=[AssertionError, TimeoutError],
+    )
+
+def after_scenario(context, scenario):
+    after_scenario_hook(context, scenario)
+
+def after_all(context):
+    print(retry_report(context))
+```
+
+### Feature file with retry tags
+
+```gherkin
+@flaky
+@retry:5
+Feature: Flaky scenarios
+
+  @retry:0
+  Scenario: Never retry this
+    Given a stable condition
+    Then it should pass
+
+  Scenario: Retry up to 5 times
+    Given a flaky condition
+    Then it might fail
+```
+
+## Contributing
+
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 
-MIT
+[MIT](LICENSE) — Copyright (c) 2026 Mathias Paulenko
