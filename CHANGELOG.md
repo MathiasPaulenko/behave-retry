@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.0] - 2026-07-13
+
+### Added
+
+- `max_total_retries` parameter in `RetryConfig` and `setup_retry` — global budget for total retries across all scenarios
+- `_behave_retry_total` counter tracked in context by `patched_run`
+- Validation for `max_total_retries` (must be >= 0 or None) in `RetryConfig.__post_init__`
+- 9 new tests: 3 for config validation, 6 for budget behavior (exhausted, unlimited, zero, shared, not consumed on pass, stored in config)
+
 ## [1.5.0] - 2026-07-13
 
 ### Added

@@ -135,6 +135,16 @@ Feature: Flaky scenarios
 
 Scenario-level tags always take precedence over Feature-level tags.
 
+### Global retry budget
+
+Limit the total number of retries across all scenarios:
+
+```python
+setup_retry(context, max_retries=5, max_total_retries=20)
+```
+
+Once the global budget is exhausted, no more retries are attempted — remaining scenarios run only once. `None` (default) means unlimited.
+
 ### Retry stats
 
 ```python
@@ -193,7 +203,7 @@ The callback receives `(context, scenario, attempt, exception)` where `attempt` 
 
 ## API reference
 
-### `setup_retry(context, max_retries=0, retry_tags=None, retry_on=None, retry_delay=0.0, backoff_factor=1.0, on_retry=None)`
+### `setup_retry(context, max_retries=0, retry_tags=None, retry_on=None, retry_delay=0.0, backoff_factor=1.0, on_retry=None, max_total_retries=None)`
 
 Configure retry on the behave context. Call this in `before_all`. This patches `behave.model.Scenario.run` to re-execute failed scenarios automatically.
 
@@ -206,6 +216,7 @@ Configure retry on the behave context. Call this in `before_all`. This patches `
 | `retry_delay` | `float` | `0.0` | Seconds to wait before each retry (0 = no delay) |
 | `backoff_factor` | `float` | `1.0` | Multiplier applied to `retry_delay` after each retry (must be >= 1.0) |
 | `on_retry` | `Callable \| None` | `None` | Callback invoked before each retry with `(context, scenario, attempt, exception)` |
+| `max_total_retries` | `int \| None` | `None` | Global budget for total retries across all scenarios (None = unlimited) |
 
 ### `after_scenario_hook(context, scenario)`
 
@@ -227,6 +238,7 @@ Frozen dataclass for configuration.
 | `retry_delay` | `float` | `0.0` | Seconds to wait before each retry (must be >= 0) |
 | `backoff_factor` | `float` | `1.0` | Multiplier applied to `retry_delay` (must be >= 1.0) |
 | `on_retry` | `Callable[[Any, Any, int, Exception \| None], None] \| None` | `None` | Callback invoked before each retry |
+| `max_total_retries` | `int \| None` | `None` | Global budget for total retries (None = unlimited) |
 
 Methods:
 

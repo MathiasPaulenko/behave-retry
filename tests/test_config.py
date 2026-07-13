@@ -24,6 +24,7 @@ class TestRetryConfigDefaults:
         assert config.retry_delay == 0.0
         assert config.backoff_factor == 1.0
         assert config.on_retry is None
+        assert config.max_total_retries is None
 
     def test_negative_max_retries_raises(self):
         import pytest
@@ -42,6 +43,18 @@ class TestRetryConfigDefaults:
 
         with pytest.raises(ValueError, match="backoff_factor must be >= 1.0"):
             RetryConfig(backoff_factor=0.5)
+
+    def test_negative_max_total_retries_raises(self):
+        with pytest.raises(ValueError, match="max_total_retries must be >= 0 or None"):
+            RetryConfig(max_total_retries=-1)
+
+    def test_max_total_retries_zero_allowed(self):
+        config = RetryConfig(max_total_retries=0)
+        assert config.max_total_retries == 0
+
+    def test_max_total_retries_none_allowed(self):
+        config = RetryConfig(max_total_retries=None)
+        assert config.max_total_retries is None
 
     def test_frozen(self):
         config = RetryConfig(max_retries=3)

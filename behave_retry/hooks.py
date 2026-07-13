@@ -315,6 +315,22 @@ def _patch_scenario_run(context: Any) -> None:
                 )
                 return True
 
+            total_retries = getattr(context, "_behave_retry_total", 0)
+            if (
+                config.max_total_retries is not None
+                and total_retries >= config.max_total_retries
+            ):
+                stats.update_retry(
+                    scenario=name,
+                    attempts=attempt,
+                    final_status="failed",
+                    exceptions=_get_scenario_exceptions(self),
+                    key=key,
+                )
+                return True
+
+            context._behave_retry_total = total_retries + 1
+
             if config.on_retry is not None:
                 exc = _get_last_exception(self)
                 config.on_retry(context, self, attempt, exc)
@@ -341,6 +357,7 @@ def setup_retry(
     retry_delay: float = 0.0,
     backoff_factor: float = 1.0,
     on_retry: RetryCallback | None = None,
+    max_total_retries: int | None = None,
 ) -> None:
     """Configure retry on the behave context.
 
@@ -359,6 +376,8 @@ def setup_retry(
             retry. Must be >= 1.0.
         on_retry: Optional callback invoked before each retry with
             ``(context, scenario, attempt, exception)``.
+        max_total_retries: Global budget for total retries across all
+            scenarios. ``None`` = unlimited.
     """
     config = RetryConfig(
         max_retries=max_retries,
@@ -367,11 +386,13 @@ def setup_retry(
         retry_delay=retry_delay,
         backoff_factor=backoff_factor,
         on_retry=on_retry,
+        max_total_retries=max_total_retries,
     )
 
     context._behave_retry_config = config
     context._behave_retry_stats = RetryStats()
     context._behave_retry_attempts: dict[str, int] = {}
+    context._behave_retry_total: int = 0
 
     _patch_scenario_run(context)
 

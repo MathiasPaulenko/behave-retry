@@ -928,3 +928,134 @@ class TestFeatureTagInheritance:
             mock_scenario.run(s, FakeRunner())
 
         assert call_count == 2
+
+
+class TestMaxTotalRetries:
+    """Test the global retry budget feature."""
+
+    def test_budget_exhausted_stops_retry(self):
+        from unittest.mock import patch
+
+        ctx = FakeContext()
+        setup_retry(ctx, max_retries=5, max_total_retries=2)
+
+        call_count = 0
+
+        def fake_original_run(self, runner):
+            nonlocal call_count
+            call_count += 1
+            self.status = "failed"
+            return True
+
+        with patch("behave.model.Scenario") as mock_scenario:
+            mock_scenario.run = staticmethod(fake_original_run)
+            _patch_scenario_run(ctx)
+
+            s1 = FakeScenario("A", status="failed")
+            mock_scenario.run(s1, FakeRunner())
+            s2 = FakeScenario("B", status="failed")
+            mock_scenario.run(s2, FakeRunner())
+
+        assert call_count == 4
+
+    def test_budget_none_unlimited(self):
+        from unittest.mock import patch
+
+        ctx = FakeContext()
+        setup_retry(ctx, max_retries=2, max_total_retries=None)
+
+        call_count = 0
+
+        def fake_original_run(self, runner):
+            nonlocal call_count
+            call_count += 1
+            self.status = "failed"
+            return True
+
+        with patch("behave.model.Scenario") as mock_scenario:
+            mock_scenario.run = staticmethod(fake_original_run)
+            _patch_scenario_run(ctx)
+
+            s1 = FakeScenario("A", status="failed")
+            mock_scenario.run(s1, FakeRunner())
+            s2 = FakeScenario("B", status="failed")
+            mock_scenario.run(s2, FakeRunner())
+
+        assert call_count == 6
+
+    def test_budget_zero_no_retries(self):
+        from unittest.mock import patch
+
+        ctx = FakeContext()
+        setup_retry(ctx, max_retries=5, max_total_retries=0)
+
+        call_count = 0
+
+        def fake_original_run(self, runner):
+            nonlocal call_count
+            call_count += 1
+            self.status = "failed"
+            return True
+
+        with patch("behave.model.Scenario") as mock_scenario:
+            mock_scenario.run = staticmethod(fake_original_run)
+            _patch_scenario_run(ctx)
+
+            s = FakeScenario("A", status="failed")
+            mock_scenario.run(s, FakeRunner())
+
+        assert call_count == 1
+
+    def test_budget_shared_across_scenarios(self):
+        from unittest.mock import patch
+
+        ctx = FakeContext()
+        setup_retry(ctx, max_retries=5, max_total_retries=3)
+
+        call_count = 0
+
+        def fake_original_run(self, runner):
+            nonlocal call_count
+            call_count += 1
+            self.status = "failed"
+            return True
+
+        with patch("behave.model.Scenario") as mock_scenario:
+            mock_scenario.run = staticmethod(fake_original_run)
+            _patch_scenario_run(ctx)
+
+            for name in ("A", "B", "C", "D"):
+                s = FakeScenario(name, status="failed")
+                mock_scenario.run(s, FakeRunner())
+
+        assert call_count == 7
+
+    def test_budget_not_consumed_on_pass(self):
+        from unittest.mock import patch
+
+        ctx = FakeContext()
+        setup_retry(ctx, max_retries=3, max_total_retries=1)
+
+        call_count = 0
+
+        def fake_original_run(self, runner):
+            nonlocal call_count
+            call_count += 1
+            self.status = "passed"
+            return False
+
+        with patch("behave.model.Scenario") as mock_scenario:
+            mock_scenario.run = staticmethod(fake_original_run)
+            _patch_scenario_run(ctx)
+
+            s = FakeScenario("A", status="failed")
+            mock_scenario.run(s, FakeRunner())
+
+        assert call_count == 1
+        assert ctx._behave_retry_total == 0
+
+    def test_setup_retry_stores_max_total_retries(self):
+        ctx = FakeContext()
+        setup_retry(ctx, max_retries=3, max_total_retries=10)
+        assert ctx._behave_retry_config.max_total_retries == 10
+        assert ctx._behave_retry_total == 0

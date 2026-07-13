@@ -136,6 +136,9 @@ class RetryConfig:
             delays are 2s, 4s, 8s, ...
         on_retry: Optional callback invoked before each retry with
             ``(context, scenario, attempt, exception)``.
+        max_total_retries: Global budget for total retries across all
+            scenarios. ``None`` = unlimited. When the budget is exhausted,
+            no more retries are attempted.
     """
 
     max_retries: int = 0
@@ -144,13 +147,15 @@ class RetryConfig:
     retry_delay: float = 0.0
     backoff_factor: float = 1.0
     on_retry: RetryCallback | None = None
+    max_total_retries: int | None = None
 
     def __post_init__(self) -> None:
         """Validate configuration after initialization.
 
         Raises:
             ValueError: If ``max_retries`` is negative, ``retry_delay`` is
-                negative, or ``backoff_factor`` is less than 1.0.
+                negative, ``backoff_factor`` is less than 1.0, or
+                ``max_total_retries`` is negative.
         """
         if self.max_retries < 0:
             raise ValueError(f"max_retries must be >= 0, got {self.max_retries}")
@@ -159,6 +164,10 @@ class RetryConfig:
         if self.backoff_factor < 1.0:
             raise ValueError(
                 f"backoff_factor must be >= 1.0, got {self.backoff_factor}"
+            )
+        if self.max_total_retries is not None and self.max_total_retries < 0:
+            raise ValueError(
+                f"max_total_retries must be >= 0 or None, got {self.max_total_retries}"
             )
 
     def get_retry_delay(self, attempt: int) -> float:
