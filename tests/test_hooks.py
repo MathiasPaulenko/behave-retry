@@ -284,7 +284,7 @@ class TestPatchScenarioRun:
 
         call_count = 0
 
-        def fake_run(self, runner):
+        def fake_original_run(self, runner):
             nonlocal call_count
             call_count += 1
             if call_count == 1:
@@ -294,13 +294,11 @@ class TestPatchScenarioRun:
             return False
 
         with patch("behave.model.Scenario") as mock_scenario:
-            mock_scenario.run = staticmethod(fake_run)
+            mock_scenario.run = staticmethod(fake_original_run)
             _patch_scenario_run(ctx)
 
-            scenario = FakeScenario("Login", status="failed")
-            runner = FakeRunner()
-            runner.context = ctx
-            result = mock_scenario.run(scenario, runner)
+            s = FakeScenario("Login", status="failed")
+            result = mock_scenario.run(s, FakeRunner())
 
         assert result is False
         assert call_count == 2
@@ -318,23 +316,21 @@ class TestPatchScenarioRun:
 
         call_count = 0
 
-        def fake_run(self, runner):
+        def fake_original_run(self, runner):
             nonlocal call_count
             call_count += 1
             self.status = "failed"
             return True
 
         with patch("behave.model.Scenario") as mock_scenario:
-            mock_scenario.run = staticmethod(fake_run)
+            mock_scenario.run = staticmethod(fake_original_run)
             _patch_scenario_run(ctx)
 
-            scenario = FakeScenario("Login", status="failed")
-            runner = FakeRunner()
-            runner.context = ctx
-            result = mock_scenario.run(scenario, runner)
+            s = FakeScenario("Login", status="failed")
+            result = mock_scenario.run(s, FakeRunner())
 
         assert result is True
-        assert call_count == 3  # 1 initial + 2 retries
+        assert call_count == 3
         stats = ctx._behave_retry_stats
         assert len(stats.scenarios_retried) == 1
         assert stats.scenarios_retried[0].attempts == 3
@@ -349,20 +345,18 @@ class TestPatchScenarioRun:
 
         call_count = 0
 
-        def fake_run(self, runner):
+        def fake_original_run(self, runner):
             nonlocal call_count
             call_count += 1
             self.status = "failed"
             return True
 
         with patch("behave.model.Scenario") as mock_scenario:
-            mock_scenario.run = staticmethod(fake_run)
+            mock_scenario.run = staticmethod(fake_original_run)
             _patch_scenario_run(ctx)
 
-            scenario = FakeScenario("Login", tags=["@retry:0"], status="failed")
-            runner = FakeRunner()
-            runner.context = ctx
-            result = mock_scenario.run(scenario, runner)
+            s = FakeScenario("Login", tags=["@retry:0"], status="failed")
+            result = mock_scenario.run(s, FakeRunner())
 
         assert result is True
         assert call_count == 1
@@ -376,20 +370,18 @@ class TestPatchScenarioRun:
 
         call_count = 0
 
-        def fake_run(self, runner):
+        def fake_original_run(self, runner):
             nonlocal call_count
             call_count += 1
             self.status = "failed"
             return True
 
         with patch("behave.model.Scenario") as mock_scenario:
-            mock_scenario.run = staticmethod(fake_run)
+            mock_scenario.run = staticmethod(fake_original_run)
             _patch_scenario_run(ctx)
 
-            scenario = FakeScenario("Login", tags=["@smoke"], status="failed")
-            runner = FakeRunner()
-            runner.context = ctx
-            result = mock_scenario.run(scenario, runner)
+            s = FakeScenario("Login", tags=["@smoke"], status="failed")
+            result = mock_scenario.run(s, FakeRunner())
 
         assert result is True
         assert call_count == 1
@@ -403,7 +395,7 @@ class TestPatchScenarioRun:
 
         call_count = 0
 
-        def fake_run(self, runner):
+        def fake_original_run(self, runner):
             nonlocal call_count
             call_count += 1
             self.status = "failed"
@@ -411,13 +403,11 @@ class TestPatchScenarioRun:
             return True
 
         with patch("behave.model.Scenario") as mock_scenario:
-            mock_scenario.run = staticmethod(fake_run)
+            mock_scenario.run = staticmethod(fake_original_run)
             _patch_scenario_run(ctx)
 
-            scenario = FakeScenario("Login", status="failed")
-            runner = FakeRunner()
-            runner.context = ctx
-            result = mock_scenario.run(scenario, runner)
+            s = FakeScenario("Login", status="failed")
+            result = mock_scenario.run(s, FakeRunner())
 
         assert result is True
         assert call_count == 1
@@ -431,7 +421,7 @@ class TestPatchScenarioRun:
 
         call_count = 0
 
-        def fake_run(self, runner):
+        def fake_original_run(self, runner):
             nonlocal call_count
             call_count += 1
             if call_count == 1:
@@ -443,13 +433,11 @@ class TestPatchScenarioRun:
             return False
 
         with patch("behave.model.Scenario") as mock_scenario:
-            mock_scenario.run = staticmethod(fake_run)
+            mock_scenario.run = staticmethod(fake_original_run)
             _patch_scenario_run(ctx)
 
-            scenario = FakeScenario("Login", status="failed")
-            runner = FakeRunner()
-            runner.context = ctx
-            result = mock_scenario.run(scenario, runner)
+            s = FakeScenario("Login", status="failed")
+            result = mock_scenario.run(s, FakeRunner())
 
         assert result is False
         assert call_count == 2
@@ -461,18 +449,16 @@ class TestPatchScenarioRun:
         ctx = FakeContext()
         setup_retry(ctx, max_retries=3)
 
-        def fake_run(self, runner):
+        def fake_original_run(self, runner):
             self.status = "passed"
             return False
 
         with patch("behave.model.Scenario") as mock_scenario:
-            mock_scenario.run = staticmethod(fake_run)
+            mock_scenario.run = staticmethod(fake_original_run)
             _patch_scenario_run(ctx)
 
-            scenario = FakeScenario("Login", status="passed")
-            runner = FakeRunner()
-            runner.context = ctx
-            result = mock_scenario.run(scenario, runner)
+            s = FakeScenario("Login", status="passed")
+            result = mock_scenario.run(s, FakeRunner())
 
         assert result is False
         assert len(ctx._behave_retry_stats.scenarios_retried) == 0

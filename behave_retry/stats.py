@@ -7,7 +7,15 @@ from dataclasses import dataclass, field
 
 @dataclass
 class ScenarioRetry:
-    """Record of retry attempts for a single scenario."""
+    """Record of retry attempts for a single scenario.
+
+    Attributes:
+        scenario: The name of the scenario.
+        attempts: Total number of execution attempts (1 = no retry).
+        final_status: The final status: ``"passed"`` or ``"failed"``.
+        exceptions: List of exception class names encountered.
+        key: Optional unique key (``filename:line``) to prevent collisions.
+    """
 
     scenario: str
     attempts: int
@@ -26,7 +34,12 @@ class ScenarioRetry:
         return self.was_retried and self.final_status == "passed"
 
     def to_dict(self) -> dict[str, object]:
-        """Serialize to a dictionary for CI/CD reporting."""
+        """Serialize to a dictionary for CI/CD reporting.
+
+        Returns:
+            A dictionary with scenario, attempts, final_status,
+            exceptions, was_retried, and passed_on_retry keys.
+        """
         return {
             "scenario": self.scenario,
             "attempts": self.attempts,
@@ -39,17 +52,24 @@ class ScenarioRetry:
 
 @dataclass
 class RetryStats:
-    """Aggregate retry statistics for a test run."""
+    """Aggregate retry statistics for a test run.
+
+    Attributes:
+        total_retries: Total number of retry attempts across all scenarios.
+        scenarios_retried: List of ``ScenarioRetry`` records.
+    """
 
     total_retries: int = 0
     scenarios_retried: list[ScenarioRetry] = field(default_factory=list)
 
     @property
     def scenarios_passed_on_retry(self) -> int:
+        """Count of scenarios that passed after at least one retry."""
         return sum(1 for s in self.scenarios_retried if s.passed_on_retry)
 
     @property
     def scenarios_failed_after_retry(self) -> int:
+        """Count of scenarios that failed after exhausting all retries."""
         return sum(
             1 for s in self.scenarios_retried if s.final_status == "failed"
         )
@@ -62,7 +82,15 @@ class RetryStats:
         exceptions: list[str] | None = None,
         key: str | None = None,
     ) -> None:
-        """Record a scenario that was retried."""
+        """Record a scenario that was retried.
+
+        Args:
+            scenario: The name of the scenario.
+            attempts: Total number of execution attempts.
+            final_status: The final status: ``"passed"`` or ``"failed"``.
+            exceptions: List of exception class names, or ``None``.
+            key: Optional unique key for collision prevention.
+        """
         self.total_retries += attempts - 1
         self.scenarios_retried.append(
             ScenarioRetry(
@@ -89,9 +117,16 @@ class RetryStats:
         attempts, final_status, and exceptions are updated in place
         and ``total_retries`` is adjusted accordingly. Otherwise, a
         new entry is created via ``add_retry``.
+
+        Args:
+            scenario: The name of the scenario.
+            attempts: Total number of execution attempts.
+            final_status: The final status: ``"passed"`` or ``"failed"``.
+            exceptions: List of exception class names, or ``None``.
+            key: Optional unique key for collision prevention.
         """
+        match_key = key if key is not None else scenario
         for s in self.scenarios_retried:
-            match_key = key if key is not None else scenario
             s_key = s.key if s.key is not None else s.scenario
             if s_key == match_key:
                 self.total_retries -= s.attempts - 1
@@ -103,7 +138,11 @@ class RetryStats:
         self.add_retry(scenario, attempts, final_status, exceptions, key=key)
 
     def summary(self) -> str:
-        """Human-readable retry summary."""
+        """Human-readable retry summary.
+
+        Returns:
+            A formatted multi-line string with retry statistics.
+        """
         if not self.scenarios_retried:
             return "Retry Summary: No retries needed."
 
@@ -126,7 +165,12 @@ class RetryStats:
         return "\n".join(lines)
 
     def to_dict(self) -> dict[str, object]:
-        """Serialize to a dictionary for CI/CD reporting."""
+        """Serialize to a dictionary for CI/CD reporting.
+
+        Returns:
+            A dictionary with total_retries, scenarios_retried,
+            scenarios_passed_on_retry, and scenarios_failed_after_retry.
+        """
         return {
             "total_retries": self.total_retries,
             "scenarios_retried": [s.to_dict() for s in self.scenarios_retried],

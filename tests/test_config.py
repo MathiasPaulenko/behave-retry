@@ -85,3 +85,8 @@ class TestGetScenarioRetries:
     def test_first_retry_tag_wins(self):
         config = RetryConfig(max_retries=3)
         assert config.get_scenario_retries(["@retry:2", "@retry:5"]) == 2
+
+    def test_negative_tag_clamped_to_zero(self):
+        config = RetryConfig(max_retries=3)
+        assert config.get_scenario_retries(["@retry:-5"]) == 0
+        assert config.get_scenario_retries(["retry:-1"]) == 0

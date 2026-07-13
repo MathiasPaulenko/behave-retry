@@ -6,7 +6,7 @@ from .config import RetryConfig, parse_retry_tag
 from .hooks import after_scenario_hook, retry_report, setup_retry
 from .stats import RetryStats, ScenarioRetry
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 
 __all__ = [
     "setup_retry",
