@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "behave-retry"
-version = "1.8.1"
+version = "1.8.2"
 description = "Automatic retry for failed Behave scenarios — tag overrides, exception filtering, flakiness stats"
 readme = "README.md"
 license = "MIT"
@@ -33,11 +33,17 @@ dev = [
     "ruff>=0.5",
     "behave>=1.2.6",
 ]
+docs = [
+    "sphinx>=7.0",
+    "furo>=2024.0",
+    "myst-parser>=3.0",
+]
 
 [project.urls]
 Homepage = "https://github.com/MathiasPaulenko/behave-retry"
 Repository = "https://github.com/MathiasPaulenko/behave-retry"
 Issues = "https://github.com/MathiasPaulenko/behave-retry/issues"
+Documentation = "https://mathiaspaulenko.github.io/behave-retry/"
 Changelog = "https://github.com/MathiasPaulenko/behave-retry/blob/main/CHANGELOG.md"
 
 [tool.hatch.build.targets.wheel]

@@ -11,7 +11,6 @@ from behave_retry.hooks import (
     _get_scenario_exceptions,
     _get_scenario_key,
     _get_scenario_name,
-    _get_scenario_status,
     _get_scenario_tags,
     _get_step_status,
     _patch_scenario_run,
@@ -231,23 +230,6 @@ class TestHelpers:
     def test_get_scenario_name(self):
         s = FakeScenario("Login")
         assert _get_scenario_name(s) == "Login"
-
-    def test_get_scenario_status_string(self):
-        s = FakeScenario("X", status="failed")
-        assert _get_scenario_status(s) == "failed"
-
-    def test_get_scenario_status_enum(self):
-        class FakeStatus:
-            name = "PASSED"
-
-        s = FakeScenario("X")
-        s.status = FakeStatus()
-        assert _get_scenario_status(s) == "passed"
-
-    def test_get_scenario_status_default(self):
-        s = FakeScenario("X")
-        del s.status
-        assert _get_scenario_status(s) == "failed"
 
     def test_get_step_status_none(self):
         step = FakeStep()
@@ -1007,6 +989,32 @@ class TestMaxTotalRetries:
             mock_scenario.run(s, FakeRunner())
 
         assert call_count == 1
+
+    def test_budget_zero_no_stats_recorded(self):
+        from unittest.mock import patch
+
+        ctx = FakeContext()
+        setup_retry(ctx, max_retries=5, max_total_retries=0)
+
+        call_count = 0
+
+        def fake_original_run(self, runner):
+            nonlocal call_count
+            call_count += 1
+            self.status = "failed"
+            return True
+
+        with patch("behave.model.Scenario") as mock_scenario:
+            mock_scenario.run = staticmethod(fake_original_run)
+            _patch_scenario_run(ctx)
+
+            s = FakeScenario("A", status="failed")
+            result = mock_scenario.run(s, FakeRunner())
+
+        assert result is True
+        assert call_count == 1
+        stats = ctx._behave_retry_stats
+        assert len(stats.scenarios_retried) == 0
 
     def test_budget_shared_across_scenarios(self):
         from unittest.mock import patch

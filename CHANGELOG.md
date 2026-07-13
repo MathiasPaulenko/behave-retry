@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.2] - 2026-07-13
+
+### Added
+
+- Sphinx documentation site with Furo theme deployed to GitHub Pages
+- 17 documentation pages: installation, quickstart, features, configuration, examples, how it works, API reference
+- GitHub Actions workflow for automatic docs deployment
+- `docs` optional dependency group in pyproject.toml
+- Documentation URL in pyproject.toml project urls
+
+### Fixed
+
+- `max_total_retries` budget exhaustion no longer records stats on first attempt (attempt=1) — consistent with retry_on filter path
+- Removed unused `_get_scenario_status` dead code from hooks.py
+
+### Changed
+
+- README.md simplified with comparison table, how it works summary, and documentation links
+- Coverage badge updated to 100%
+
 ## [1.8.1] - 2026-07-13
 
 ### Added

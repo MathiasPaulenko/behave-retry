@@ -10,7 +10,6 @@ from behave_retry.hooks import (
     _get_scenario_exceptions,
     _get_scenario_key,
     _get_scenario_name,
-    _get_scenario_status,
     _get_scenario_tags,
     _get_step_status,
     _patch_scenario_run,
@@ -110,22 +109,6 @@ class TestHelpersEdge:
     def test_get_scenario_name_empty_string(self):
         s = FakeScenario("")
         assert _get_scenario_name(s) == ""
-
-    def test_get_scenario_status_missing(self):
-        class NoStatus:
-            name = "X"
-
-        assert _get_scenario_status(NoStatus()) == "failed"
-
-    def test_get_scenario_status_none(self):
-        s = FakeScenario("X")
-        s.status = None
-        assert _get_scenario_status(s) == "none"
-
-    def test_get_scenario_status_empty_string(self):
-        s = FakeScenario("X")
-        s.status = ""
-        assert _get_scenario_status(s) == ""
 
     def test_get_step_status_missing(self):
         class NoStatus:

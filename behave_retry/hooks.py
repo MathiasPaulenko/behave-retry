@@ -104,22 +104,6 @@ def _get_scenario_name(scenario: Any) -> str:
     return getattr(scenario, "name", str(scenario))
 
 
-def _get_scenario_status(scenario: Any) -> str:
-    """Get scenario status from behave scenario.
-
-    Args:
-        scenario: Behave scenario object.
-
-    Returns:
-        Lowercase status string (e.g. ``"passed"``, ``"failed"``).
-        Defaults to ``"failed"`` if the scenario has no status attribute.
-    """
-    status = getattr(scenario, "status", "failed")
-    if hasattr(status, "name"):
-        return status.name.lower()
-    return str(status).lower()
-
-
 def _get_step_status(step: Any) -> str:
     """Get step status as lowercase string.
 
@@ -327,13 +311,14 @@ def _patch_scenario_run(context: Any) -> None:
                 config.max_total_retries is not None
                 and total_retries >= config.max_total_retries
             ):
-                stats.update_retry(
-                    scenario=name,
-                    attempts=attempt,
-                    final_status="failed",
-                    exceptions=_get_scenario_exceptions(self),
-                    key=key,
-                )
+                if attempt > 1:
+                    stats.update_retry(
+                        scenario=name,
+                        attempts=attempt,
+                        final_status="failed",
+                        exceptions=_get_scenario_exceptions(self),
+                        key=key,
+                    )
                 return True
 
             context._behave_retry_total = total_retries + 1
