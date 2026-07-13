@@ -88,9 +88,8 @@ def after_scenario_hook(context: Any, scenario: Any) -> None:
     if status == "failed":
         max_for_scenario = config.get_scenario_retries(tags)
 
-        if max_for_scenario > 0 and attempts <= max_for_scenario:
-            if config.should_retry_tag(tags):
-                stats.add_retry(
+        if max_for_scenario > 0 and attempts <= max_for_scenario and config.should_retry_tag(tags):
+            stats.add_retry(
                     scenario=name,
                     attempts=attempts,
                     final_status="failed",

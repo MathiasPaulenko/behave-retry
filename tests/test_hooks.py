@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from behave_retry import setup_retry, after_scenario_hook, retry_report, RetryConfig
+from behave_retry import RetryConfig, after_scenario_hook, retry_report, setup_retry
 from behave_retry.hooks import parse_retry_tag
 
 
