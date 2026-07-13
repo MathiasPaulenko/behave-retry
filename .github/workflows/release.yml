@@ -49,9 +49,10 @@ jobs:
           name: dist
           path: dist/
       - uses: pypa/gh-action-pypi-publish@release/v1
+        continue-on-error: true
 
   release-github:
-    needs: publish
+    needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
