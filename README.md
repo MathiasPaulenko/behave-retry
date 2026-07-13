@@ -6,13 +6,13 @@
 [![License](https://img.shields.io/pypi/l/behave-retry)](https://github.com/MathiasPaulenko/behave-retry/blob/main/LICENSE)
 [![Coverage](https://img.shields.io/badge/coverage-%3E90%25-brightgreen)](https://github.com/MathiasPaulenko/behave-retry)
 
-Automatic retry for failed [Behave](https://github.com/behave/behave) scenarios — tag overrides, exception filtering, and flakiness stats.
+Automatic retry for failed [Behave](https://github.com/behave/behave) scenarios — real re-execution, tag overrides, exception filtering, and flakiness stats.
 
 ## Why?
 
 Behave has no built-in retry. When a scenario fails due to flakiness (timing, network, race conditions), there's no way to re-run it automatically. Cucumber has `--retry` natively. Behave doesn't.
 
-**behave-retry** fills that gap with a lightweight, zero-dependency library that integrates through Behave's hook system.
+**behave-retry** fills that gap by patching Behave's `Scenario.run` to re-execute failed scenarios automatically — with tag overrides, exception filtering, and flakiness stats.
 
 ## Table of contents
 
@@ -58,7 +58,7 @@ def after_all(context):
     print(retry_report(context))
 ```
 
-That's it. Failed scenarios will now be retried up to 3 times automatically.
+That's it. Failed scenarios will now be re-executed up to 3 times automatically.
 
 ## Features
 
@@ -134,14 +134,14 @@ Retry Summary:
 
   - "Login with invalid credentials" — 3 attempts, failed (AssertionError)
   - "Search products" — 2 attempts, passed
-  - "Checkout flow" — 1 attempt, passed
+  - "Checkout flow" — 2 attempts, passed
 ```
 
 ## API reference
 
 ### `setup_retry(context, max_retries=0, retry_tags=None, retry_on=None)`
 
-Configure retry on the behave context. Call this in `before_all`.
+Configure retry on the behave context. Call this in `before_all`. This patches `behave.model.Scenario.run` to re-execute failed scenarios automatically.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
@@ -152,7 +152,7 @@ Configure retry on the behave context. Call this in `before_all`.
 
 ### `after_scenario_hook(context, scenario)`
 
-Handle retry logic. Call this in `after_scenario`.
+Track retry attempts. Call this in `after_scenario`. The actual retry loop is handled automatically by the `Scenario.run` patch installed by `setup_retry`.
 
 ### `retry_report(context) -> str`
 
@@ -214,7 +214,7 @@ Methods:
 
 ### `parse_retry_tag(tags) -> int | None`
 
-Parse `@retry:N` tag from scenario tags. Returns `N` if found, `None` otherwise.
+Parse `@retry:N` tag from scenario tags. Returns `N` if found, `None` otherwise. Also available as `behave_retry.parse_retry_tag`.
 
 ## Configuration
 

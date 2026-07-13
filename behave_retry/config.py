@@ -5,6 +5,20 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 
+def parse_retry_tag(tags: list[str]) -> int | None:
+    """Parse @retry:N tag from scenario tags.
+
+    Returns N if found, None otherwise.
+    """
+    for tag in tags:
+        if tag.startswith("@retry:"):
+            try:
+                return int(tag.split(":")[1])
+            except (ValueError, IndexError):
+                pass
+    return None
+
+
 @dataclass(frozen=True)
 class RetryConfig:
     """Configuration for retry behavior.
@@ -49,10 +63,7 @@ class RetryConfig:
         @retry:N tag overrides global max_retries.
         @retry:0 disables retry for this scenario.
         """
-        for tag in tags:
-            if tag.startswith("@retry:"):
-                try:
-                    return int(tag.split(":")[1])
-                except (ValueError, IndexError):
-                    pass
+        override = parse_retry_tag(tags)
+        if override is not None:
+            return override
         return self.max_retries

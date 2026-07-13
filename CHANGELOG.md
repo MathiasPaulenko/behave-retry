@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.0] - 2026-07-13
+
+### Added
+
+- **Real retry**: `setup_retry` now patches `behave.model.Scenario.run` to re-execute failed scenarios automatically
+- `parse_retry_tag` moved to `config.py` and unified with `get_scenario_retries` — single source of truth for `@retry:N` parsing
+- `parse_retry_tag` exported from top-level package
+
+### Fixed
+
+- `_get_scenario_key` no longer uses `Feature` object as fallback — only uses `filename` (string) or scenario name
+- `pyproject.toml` description no longer mentions non-existent CLI flags
+- `after_scenario_hook` docstring no longer references non-existent CLI flags
+- README example output fixed: scenarios with 1 attempt are not "retried"
+
+### Changed
+
+- `after_scenario_hook` is now backward-compatible — the retry loop is handled by the patched `Scenario.run`, the hook only tracks attempts
+- Version bumped to 1.1.0 (minor: new feature — real retry)
+
 ## [1.0.2] - 2026-07-13
 
 ### Fixed
