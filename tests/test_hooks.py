@@ -6,13 +6,28 @@ from behave_retry import RetryConfig, after_scenario_hook, retry_report, setup_r
 from behave_retry.hooks import parse_retry_tag
 
 
+class FakeStep:
+    """Mimics behave.model.Step."""
+
+    def __init__(self, status: str = "passed", error: Exception | None = None):
+        self.status = status
+        self.error = error
+
+
 class FakeScenario:
     """Mimics behave.model.Scenario."""
 
-    def __init__(self, name: str, tags: list[str] | None = None, status: str = "failed"):
+    def __init__(
+        self,
+        name: str,
+        tags: list[str] | None = None,
+        status: str = "failed",
+        steps: list[FakeStep] | None = None,
+    ):
         self.name = name
         self.tags = tags or []
         self.status = status
+        self.steps = steps or []
 
 
 class FakeContext:
@@ -76,7 +91,7 @@ class TestAfterScenarioHook:
         after_scenario_hook(ctx, scenario)
         assert len(ctx._behave_retry_stats.scenarios_retried) == 0
 
-    def test_multiple_attempts(self):
+    def test_multiple_attempts_single_entry(self):
         ctx = FakeContext()
         setup_retry(ctx, max_retries=3)
         scenario = FakeScenario("Login", status="failed")
@@ -84,7 +99,60 @@ class TestAfterScenarioHook:
         after_scenario_hook(ctx, scenario)
         after_scenario_hook(ctx, scenario)
         assert ctx._behave_retry_attempts["Login"] == 3
-        assert len(ctx._behave_retry_stats.scenarios_retried) == 3
+        assert len(ctx._behave_retry_stats.scenarios_retried) == 1
+        assert ctx._behave_retry_stats.scenarios_retried[0].attempts == 3
+        assert ctx._behave_retry_stats.total_retries == 2
+
+    def test_passed_after_retry_updates_entry(self):
+        ctx = FakeContext()
+        setup_retry(ctx, max_retries=3)
+        scenario = FakeScenario("Login", status="failed")
+        after_scenario_hook(ctx, scenario)
+        scenario_passed = FakeScenario("Login", status="passed")
+        after_scenario_hook(ctx, scenario_passed)
+        assert len(ctx._behave_retry_stats.scenarios_retried) == 1
+        assert ctx._behave_retry_stats.scenarios_retried[0].final_status == "passed"
+        assert ctx._behave_retry_stats.scenarios_retried[0].attempts == 2
+
+    def test_exception_filter_blocks_retry(self):
+        ctx = FakeContext()
+        setup_retry(ctx, max_retries=3, retry_on=[ValueError])
+        scenario = FakeScenario(
+            "Login",
+            status="failed",
+            steps=[FakeStep(status="failed", error=AssertionError("fail"))],
+        )
+        after_scenario_hook(ctx, scenario)
+        assert len(ctx._behave_retry_stats.scenarios_retried) == 0
+
+    def test_exception_filter_allows_retry(self):
+        ctx = FakeContext()
+        setup_retry(ctx, max_retries=3, retry_on=[AssertionError])
+        scenario = FakeScenario(
+            "Login",
+            status="failed",
+            steps=[FakeStep(status="failed", error=AssertionError("fail"))],
+        )
+        after_scenario_hook(ctx, scenario)
+        assert len(ctx._behave_retry_stats.scenarios_retried) == 1
+
+    def test_exceptions_captured_from_steps(self):
+        ctx = FakeContext()
+        setup_retry(ctx, max_retries=3)
+        scenario = FakeScenario(
+            "Login",
+            status="failed",
+            steps=[FakeStep(status="failed", error=AssertionError("fail"))],
+        )
+        after_scenario_hook(ctx, scenario)
+        assert ctx._behave_retry_stats.scenarios_retried[0].exceptions == ["AssertionError"]
+
+    def test_no_retry_without_matching_tag(self):
+        ctx = FakeContext()
+        setup_retry(ctx, max_retries=3, retry_tags=["@flaky"])
+        scenario = FakeScenario("Login", tags=["@smoke"], status="failed")
+        after_scenario_hook(ctx, scenario)
+        assert len(ctx._behave_retry_stats.scenarios_retried) == 0
 
 
 class TestRetryReport:

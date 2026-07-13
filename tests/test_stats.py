@@ -82,3 +82,37 @@ class TestRetryStats:
         assert "Checkout" in summary
         assert "passed" in summary
         assert "failed" in summary
+
+
+class TestUpdateRetry:
+    def test_update_existing(self):
+        stats = RetryStats()
+        stats.add_retry("Login", attempts=2, final_status="failed")
+        stats.update_retry("Login", attempts=3, final_status="failed")
+        assert len(stats.scenarios_retried) == 1
+        assert stats.scenarios_retried[0].attempts == 3
+        assert stats.total_retries == 2
+
+    def test_update_creates_new_if_not_exists(self):
+        stats = RetryStats()
+        stats.update_retry("Login", attempts=2, final_status="passed")
+        assert len(stats.scenarios_retried) == 1
+        assert stats.scenarios_retried[0].attempts == 2
+        assert stats.scenarios_retried[0].final_status == "passed"
+
+    def test_update_changes_status(self):
+        stats = RetryStats()
+        stats.add_retry("Login", attempts=2, final_status="failed")
+        stats.update_retry("Login", attempts=3, final_status="passed")
+        assert stats.scenarios_retried[0].final_status == "passed"
+        assert stats.scenarios_passed_on_retry == 1
+        assert stats.scenarios_failed_after_retry == 0
+
+    def test_update_preserves_other_entries(self):
+        stats = RetryStats()
+        stats.add_retry("Login", attempts=2, final_status="failed")
+        stats.add_retry("Checkout", attempts=1, final_status="failed")
+        stats.update_retry("Login", attempts=3, final_status="passed")
+        assert len(stats.scenarios_retried) == 2
+        assert stats.scenarios_retried[0].scenario == "Login"
+        assert stats.scenarios_retried[1].scenario == "Checkout"

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-import traceback
 from typing import Any
 
 from .config import RetryConfig
@@ -39,11 +38,7 @@ def setup_retry(
 
 def _get_scenario_tags(scenario: Any) -> list[str]:
     """Extract tags from a behave scenario."""
-    tags = list(getattr(scenario, "tags", []) or [])
-    for tag in tags:
-        if tag.startswith("@retry:"):
-            pass
-    return tags
+    return list(getattr(scenario, "tags", []) or [])
 
 
 def _get_scenario_name(scenario: Any) -> str:
@@ -59,10 +54,36 @@ def _get_scenario_status(scenario: Any) -> str:
     return str(status).lower()
 
 
-def _get_last_exception() -> str:
-    """Get the type name of the last raised exception."""
-    exc_type = traceback.extract_tb(traceback.extract_stack()[-1])
-    return exc_type
+def _get_step_status(step: Any) -> str:
+    """Get step status as lowercase string."""
+    status = getattr(step, "status", None)
+    if status is None:
+        return ""
+    if hasattr(status, "name"):
+        return status.name.lower()
+    return str(status).lower()
+
+
+def _get_scenario_exceptions(scenario: Any) -> list[str]:
+    """Extract exception type names from failed steps in a scenario."""
+    exceptions: list[str] = []
+    for step in getattr(scenario, "steps", []) or []:
+        if _get_step_status(step) == "failed":
+            error = getattr(step, "error", None)
+            if error is not None:
+                exceptions.append(type(error).__name__)
+    return exceptions
+
+
+def _get_last_exception_type(scenario: Any) -> type[Exception] | None:
+    """Get the exception type from the last failed step in a scenario."""
+    steps = getattr(scenario, "steps", []) or []
+    for step in reversed(steps):
+        if _get_step_status(step) == "failed":
+            error = getattr(step, "error", None)
+            if error is not None:
+                return type(error)
+    return None
 
 
 def after_scenario_hook(context: Any, scenario: Any) -> None:
@@ -85,23 +106,40 @@ def after_scenario_hook(context: Any, scenario: Any) -> None:
     attempts = context._behave_retry_attempts.get(name, 0) + 1
     context._behave_retry_attempts[name] = attempts
 
-    if status == "failed":
-        max_for_scenario = config.get_scenario_retries(tags)
+    if status == "passed":
+        if attempts > 1:
+            stats.update_retry(
+                scenario=name,
+                attempts=attempts,
+                final_status="passed",
+                exceptions=[],
+            )
+        return
 
-        if max_for_scenario > 0 and attempts <= max_for_scenario and config.should_retry_tag(tags):
-            stats.add_retry(
-                    scenario=name,
-                    attempts=attempts,
-                    final_status="failed",
-                    exceptions=[],
-                )
-    elif status == "passed" and attempts > 1:
-        stats.add_retry(
-            scenario=name,
-            attempts=attempts,
-            final_status="passed",
-            exceptions=[],
-        )
+    if status != "failed":
+        return
+
+    max_for_scenario = config.get_scenario_retries(tags)
+    if max_for_scenario == 0 or not config.should_retry_tag(tags):
+        return
+
+    exc_type = _get_last_exception_type(scenario)
+    if config.retry_on and (exc_type is None or not config.should_retry_exception(exc_type)):
+        if attempts > 1:
+            stats.update_retry(
+                scenario=name,
+                attempts=attempts,
+                final_status="failed",
+                exceptions=_get_scenario_exceptions(scenario),
+            )
+        return
+
+    stats.update_retry(
+        scenario=name,
+        attempts=attempts,
+        final_status="failed",
+        exceptions=_get_scenario_exceptions(scenario),
+    )
 
 
 def retry_report(context: Any) -> str:

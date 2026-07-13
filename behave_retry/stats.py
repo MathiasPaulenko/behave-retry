@@ -60,6 +60,30 @@ class RetryStats:
             )
         )
 
+    def update_retry(
+        self,
+        scenario: str,
+        attempts: int,
+        final_status: str,
+        exceptions: list[str] | None = None,
+    ) -> None:
+        """Update an existing retry record, or create a new one.
+
+        If the scenario already exists in ``scenarios_retried``, its
+        attempts, final_status, and exceptions are updated in place
+        and ``total_retries`` is adjusted accordingly. Otherwise, a
+        new entry is created via ``add_retry``.
+        """
+        for s in self.scenarios_retried:
+            if s.scenario == scenario:
+                self.total_retries -= s.attempts - 1
+                s.attempts = attempts
+                s.final_status = final_status
+                s.exceptions = exceptions or []
+                self.total_retries += attempts - 1
+                return
+        self.add_retry(scenario, attempts, final_status, exceptions)
+
     def summary(self) -> str:
         """Human-readable retry summary."""
         if not self.scenarios_retried:
