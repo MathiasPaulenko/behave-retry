@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
 from .config import RetryConfig
@@ -39,6 +38,20 @@ def setup_retry(
 def _get_scenario_tags(scenario: Any) -> list[str]:
     """Extract tags from a behave scenario."""
     return list(getattr(scenario, "tags", []) or [])
+
+
+def _get_scenario_key(scenario: Any) -> str:
+    """Get a unique key for a scenario using filename:line when available.
+
+    Falls back to the scenario name if filename or line are missing.
+    This prevents collisions between scenarios with the same name
+    (e.g. Scenario Outlines).
+    """
+    filename = getattr(scenario, "filename", None) or getattr(scenario, "feature", None)
+    line = getattr(scenario, "line", None)
+    if filename and line is not None:
+        return f"{filename}:{line}"
+    return getattr(scenario, "name", str(scenario))
 
 
 def _get_scenario_name(scenario: Any) -> str:
@@ -99,12 +112,13 @@ def after_scenario_hook(context: Any, scenario: Any) -> None:
         return
 
     stats: RetryStats = context._behave_retry_stats
+    key = _get_scenario_key(scenario)
     name = _get_scenario_name(scenario)
     tags = _get_scenario_tags(scenario)
     status = _get_scenario_status(scenario)
 
-    attempts = context._behave_retry_attempts.get(name, 0) + 1
-    context._behave_retry_attempts[name] = attempts
+    attempts = context._behave_retry_attempts.get(key, 0) + 1
+    context._behave_retry_attempts[key] = attempts
 
     if status == "passed":
         if attempts > 1:
@@ -113,6 +127,7 @@ def after_scenario_hook(context: Any, scenario: Any) -> None:
                 attempts=attempts,
                 final_status="passed",
                 exceptions=[],
+                key=key,
             )
         return
 
@@ -131,6 +146,7 @@ def after_scenario_hook(context: Any, scenario: Any) -> None:
                 attempts=attempts,
                 final_status="failed",
                 exceptions=_get_scenario_exceptions(scenario),
+                key=key,
             )
         return
 
@@ -139,6 +155,7 @@ def after_scenario_hook(context: Any, scenario: Any) -> None:
         attempts=attempts,
         final_status="failed",
         exceptions=_get_scenario_exceptions(scenario),
+        key=key,
     )
 
 
@@ -159,7 +176,9 @@ def parse_retry_tag(tags: list[str]) -> int | None:
     Returns N if found, None otherwise.
     """
     for tag in tags:
-        match = re.match(r"^@retry:(\d+)$", tag)
-        if match:
-            return int(match.group(1))
+        if tag.startswith("@retry:"):
+            try:
+                return int(tag.split(":")[1])
+            except (ValueError, IndexError):
+                pass
     return None

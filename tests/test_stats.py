@@ -116,3 +116,53 @@ class TestUpdateRetry:
         assert len(stats.scenarios_retried) == 2
         assert stats.scenarios_retried[0].scenario == "Login"
         assert stats.scenarios_retried[1].scenario == "Checkout"
+
+
+class TestToDict:
+    def test_scenario_retry_to_dict(self):
+        sr = ScenarioRetry(
+            scenario="Login",
+            attempts=3,
+            final_status="passed",
+            exceptions=["AssertionError"],
+        )
+        d = sr.to_dict()
+        assert d["scenario"] == "Login"
+        assert d["attempts"] == 3
+        assert d["final_status"] == "passed"
+        assert d["exceptions"] == ["AssertionError"]
+        assert d["was_retried"] is True
+        assert d["passed_on_retry"] is True
+
+    def test_retry_stats_to_dict(self):
+        stats = RetryStats()
+        stats.add_retry("Login", attempts=3, final_status="passed")
+        stats.add_retry("Checkout", attempts=2, final_status="failed")
+        d = stats.to_dict()
+        assert d["total_retries"] == 3
+        assert len(d["scenarios_retried"]) == 2
+        assert d["scenarios_passed_on_retry"] == 1
+        assert d["scenarios_failed_after_retry"] == 1
+        assert d["scenarios_retried"][0]["scenario"] == "Login"
+
+    def test_empty_stats_to_dict(self):
+        stats = RetryStats()
+        d = stats.to_dict()
+        assert d["total_retries"] == 0
+        assert d["scenarios_retried"] == []
+        assert d["scenarios_passed_on_retry"] == 0
+
+
+class TestRepr:
+    def test_scenario_retry_repr(self):
+        sr = ScenarioRetry(scenario="Login", attempts=3, final_status="passed")
+        r = repr(sr)
+        assert "Login" in r
+        assert "3" in r
+        assert "passed" in r
+
+    def test_retry_stats_repr(self):
+        stats = RetryStats()
+        stats.add_retry("Login", attempts=2, final_status="failed")
+        r = repr(stats)
+        assert "Login" in r

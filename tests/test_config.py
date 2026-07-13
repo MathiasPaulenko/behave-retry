@@ -12,6 +12,19 @@ class TestRetryConfigDefaults:
         assert config.retry_tags == []
         assert config.retry_on == []
 
+    def test_negative_max_retries_raises(self):
+        import pytest
+
+        with pytest.raises(ValueError, match="max_retries must be >= 0"):
+            RetryConfig(max_retries=-1)
+
+    def test_frozen(self):
+        config = RetryConfig(max_retries=3)
+        import pytest
+
+        with pytest.raises(AttributeError):
+            config.max_retries = 5
+
 
 class TestShouldRetryTag:
     def test_no_tag_filter_retries_all(self):

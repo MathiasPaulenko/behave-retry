@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.2] - 2026-07-13
+
+### Fixed
+
+- Scenario collision fixed — uses `filename:line` as unique key instead of name
+- `parse_retry_tag` now delegates to `RetryConfig.get_scenario_retries` to avoid duplicated logic
+
+### Changed
+
+- `RetryConfig` is now a frozen dataclass (immutable)
+- `max_retries` validation: raises `ValueError` if negative
+- Removed unused `RetryExhaustedError` exception and `exceptions.py` module
+- README and CHANGELOG corrected: removed references to non-existent CLI flags and `after_retry` hook
+
+### Added
+
+- `RetryStats.to_dict()` and `ScenarioRetry.to_dict()` for CI/CD reporting
+- `__repr__` on `RetryStats` and `ScenarioRetry` (via dataclass)
+
 ## [1.0.1] - 2026-07-13
 
 ### Fixed
@@ -28,11 +47,6 @@ All notable changes to this project will be documented in this file.
 - `retry_report()` — human-readable retry summary
 - `RetryStats` and `ScenarioRetry` dataclasses for stats tracking
 - `RetryConfig` dataclass for configuration
-- `--retry N` CLI flag support
-- `--retry-tags @tag` CLI flag for tag-filtered retry
-- `--retry-on ExceptionType` CLI flag for exception-filtered retry
 - `@retry:N` tag per scenario for override
 - `@retry:0` tag to disable retry for a scenario
-- `after_retry` hook support for cleanup between retries
-- `RetryExhaustedError` exception
 - Zero required dependencies

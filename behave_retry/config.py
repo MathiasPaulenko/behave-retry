@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 
-@dataclass
+@dataclass(frozen=True)
 class RetryConfig:
     """Configuration for retry behavior.
 
@@ -18,6 +18,10 @@ class RetryConfig:
     max_retries: int = 0
     retry_tags: list[str] = field(default_factory=list)
     retry_on: list[type[Exception]] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if self.max_retries < 0:
+            raise ValueError(f"max_retries must be >= 0, got {self.max_retries}")
 
     def should_retry_tag(self, tags: list[str]) -> bool:
         """Check if scenario tags allow retry.

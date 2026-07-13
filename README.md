@@ -6,7 +6,7 @@
 [![License](https://img.shields.io/pypi/l/behave-retry)](https://github.com/MathiasPaulenko/behave-retry/blob/main/LICENSE)
 [![Coverage](https://img.shields.io/badge/coverage-%3E90%25-brightgreen)](https://github.com/MathiasPaulenko/behave-retry)
 
-Automatic retry for failed [Behave](https://github.com/behave/behave) scenarios — CLI flags, tag overrides, exception filtering, and flakiness stats.
+Automatic retry for failed [Behave](https://github.com/behave/behave) scenarios — tag overrides, exception filtering, and flakiness stats.
 
 ## Why?
 
@@ -23,7 +23,6 @@ Behave has no built-in retry. When a scenario fails due to flakiness (timing, ne
   - [Tag-filtered retry](#tag-filtered-retry)
   - [Exception-filtered retry](#exception-filtered-retry)
   - [Per-scenario override](#per-scenario-override)
-  - [Cleanup between retries](#cleanup-between-retries)
   - [Retry stats](#retry-stats)
 - [API reference](#api-reference)
 - [Configuration](#configuration)
@@ -114,18 +113,6 @@ Scenario: Never retry this
 
 The first `@retry:N` tag wins. `@retry:0` disables retry for that scenario.
 
-### Cleanup between retries
-
-Define an `after_retry` hook in your `environment.py` to clean up state between retry attempts:
-
-```python
-# environment.py
-def after_retry(context, scenario):
-    # Close browser, reset DB, clean state
-    if hasattr(context, "driver"):
-        context.driver.quit()
-```
-
 ### Retry stats
 
 ```python
@@ -173,11 +160,11 @@ Get a human-readable retry summary. Call this in `after_all`.
 
 ### `RetryConfig`
 
-Dataclass for configuration.
+Frozen dataclass for configuration.
 
 | Attribute | Type | Default | Description |
 |---|---|---|---|
-| `max_retries` | `int` | `0` | Maximum retries per scenario |
+| `max_retries` | `int` | `0` | Maximum retries per scenario (must be >= 0) |
 | `retry_tags` | `list[str]` | `[]` | Tag filter (empty = retry all) |
 | `retry_on` | `list[type[Exception]]` | `[]` | Exception filter (empty = retry on any) |
 
@@ -198,6 +185,13 @@ Aggregate retry statistics.
 | `scenarios_passed_on_retry` | `int` | Scenarios that passed after retry |
 | `scenarios_failed_after_retry` | `int` | Scenarios that still failed after retry |
 
+Methods:
+
+- `add_retry(scenario, attempts, final_status, exceptions) -> None` — Record a new retry
+- `update_retry(scenario, attempts, final_status, exceptions) -> None` — Update existing or create new
+- `summary() -> str` — Human-readable summary
+- `to_dict() -> dict` — Serialize to a dictionary for CI/CD reporting
+
 ### `ScenarioRetry`
 
 Record of retry attempts for a single scenario.
@@ -214,9 +208,9 @@ Record of retry attempts for a single scenario.
 | `was_retried` | True if retried at least once |
 | `passed_on_retry` | True if passed after retry |
 
-### `RetryExhaustedError`
+Methods:
 
-Raised when a scenario has been retried the maximum number of times.
+- `to_dict() -> dict` — Serialize to a dictionary for CI/CD reporting
 
 ### `parse_retry_tag(tags) -> int | None`
 

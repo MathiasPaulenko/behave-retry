@@ -154,6 +154,30 @@ class TestAfterScenarioHook:
         after_scenario_hook(ctx, scenario)
         assert len(ctx._behave_retry_stats.scenarios_retried) == 0
 
+    def test_filename_line_used_as_key(self):
+        ctx = FakeContext()
+        setup_retry(ctx, max_retries=3)
+        scenario = FakeScenario("Login", status="failed")
+        scenario.filename = "features/login.feature"
+        scenario.line = 10
+        after_scenario_hook(ctx, scenario)
+        assert "features/login.feature:10" in ctx._behave_retry_attempts
+
+    def test_same_name_different_line_no_collision(self):
+        ctx = FakeContext()
+        setup_retry(ctx, max_retries=3)
+        s1 = FakeScenario("Outline", status="failed")
+        s1.filename = "features/test.feature"
+        s1.line = 5
+        s2 = FakeScenario("Outline", status="failed")
+        s2.filename = "features/test.feature"
+        s2.line = 15
+        after_scenario_hook(ctx, s1)
+        after_scenario_hook(ctx, s2)
+        assert ctx._behave_retry_attempts["features/test.feature:5"] == 1
+        assert ctx._behave_retry_attempts["features/test.feature:15"] == 1
+        assert len(ctx._behave_retry_stats.scenarios_retried) == 2
+
 
 class TestRetryReport:
     def test_not_configured(self):
