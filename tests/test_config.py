@@ -2,7 +2,17 @@
 
 from __future__ import annotations
 
+import pytest
+
 from behave_retry import RetryConfig
+from behave_retry.config import _EXCEPTION_CACHE
+
+
+@pytest.fixture(autouse=True)
+def _clear_exception_cache():
+    _EXCEPTION_CACHE.clear()
+    yield
+    _EXCEPTION_CACHE.clear()
 
 
 class TestRetryConfigDefaults:
@@ -13,6 +23,7 @@ class TestRetryConfigDefaults:
         assert config.retry_on == []
         assert config.retry_delay == 0.0
         assert config.backoff_factor == 1.0
+        assert config.on_retry is None
 
     def test_negative_max_retries_raises(self):
         import pytest
@@ -74,6 +85,51 @@ class TestShouldRetryException:
     def test_exception_filter_no_match(self):
         config = RetryConfig(max_retries=3, retry_on=[AssertionError])
         assert config.should_retry_exception(ValueError) is False
+
+    def test_string_builtin_exception_matches(self):
+        config = RetryConfig(max_retries=3, retry_on=["AssertionError"])
+        assert config.should_retry_exception(AssertionError) is True
+
+    def test_string_builtin_exception_no_match(self):
+        config = RetryConfig(max_retries=3, retry_on=["ValueError"])
+        assert config.should_retry_exception(AssertionError) is False
+
+    def test_string_dotted_exception_matches(self):
+        config = RetryConfig(max_retries=3, retry_on=["json.JSONDecodeError"])
+        import json
+
+        assert config.should_retry_exception(json.JSONDecodeError) is True
+
+    def test_mixed_class_and_string(self):
+        config = RetryConfig(
+            max_retries=3, retry_on=[AssertionError, "ValueError"],
+        )
+        assert config.should_retry_exception(AssertionError) is True
+        assert config.should_retry_exception(ValueError) is True
+        assert config.should_retry_exception(KeyError) is False
+
+    def test_string_invalid_builtin_raises(self):
+        import pytest
+
+        config = RetryConfig(max_retries=3, retry_on=["NotARealException"])
+        with pytest.raises(ImportError, match="NotARealException"):
+            config.should_retry_exception(AssertionError)
+
+    def test_string_invalid_module_raises(self):
+        import pytest
+
+        config = RetryConfig(max_retries=3, retry_on=["nonexistent_module.MyError"])
+        with pytest.raises(ImportError):
+            config.should_retry_exception(AssertionError)
+
+    def test_string_cached_on_second_call(self):
+        from unittest.mock import patch
+
+        config = RetryConfig(max_retries=3, retry_on=["AssertionError"])
+        assert config.should_retry_exception(AssertionError) is True
+        with patch("behave_retry.config._import_exception") as mock_import:
+            assert config.should_retry_exception(AssertionError) is True
+            mock_import.assert_not_called()
 
 
 class TestGetScenarioRetries:

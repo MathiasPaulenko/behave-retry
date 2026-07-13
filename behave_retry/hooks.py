@@ -17,7 +17,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from .config import RetryConfig, parse_retry_tag
+from .config import ExceptionFilter, RetryCallback, RetryConfig, parse_retry_tag
 from .stats import RetryStats
 
 __all__ = [
@@ -160,12 +160,26 @@ def _get_last_exception_type(scenario: Any) -> type[Exception] | None:
         The exception type of the last failed step, or ``None`` if
         no failed step has an exception.
     """
+    exc = _get_last_exception(scenario)
+    return type(exc) if exc is not None else None
+
+
+def _get_last_exception(scenario: Any) -> Exception | None:
+    """Get the exception instance from the last failed step in a scenario.
+
+    Args:
+        scenario: Behave scenario object.
+
+    Returns:
+        The exception instance of the last failed step, or ``None`` if
+        no failed step has an exception.
+    """
     steps = getattr(scenario, "steps", []) or []
     for step in reversed(steps):
         if _step_failed(step):
             error = getattr(step, "exception", None) or getattr(step, "error", None)
             if error is not None:
-                return type(error)
+                return error
     return None
 
 
@@ -283,6 +297,10 @@ def _patch_scenario_run(context: Any) -> None:
                 )
                 return True
 
+            if config.on_retry is not None:
+                exc = _get_last_exception(self)
+                config.on_retry(context, self, attempt, exc)
+
             delay = config.get_retry_delay(attempt)
             if delay > 0:
                 time.sleep(delay)
@@ -301,9 +319,10 @@ def setup_retry(
     context: Any,
     max_retries: int = 0,
     retry_tags: list[str] | None = None,
-    retry_on: list[type[Exception]] | None = None,
+    retry_on: list[ExceptionFilter] | None = None,
     retry_delay: float = 0.0,
     backoff_factor: float = 1.0,
+    on_retry: RetryCallback | None = None,
 ) -> None:
     """Configure retry on the behave context.
 
@@ -320,6 +339,8 @@ def setup_retry(
         retry_delay: Seconds to wait before each retry (0 = no delay).
         backoff_factor: Multiplier applied to ``retry_delay`` after each
             retry. Must be >= 1.0.
+        on_retry: Optional callback invoked before each retry with
+            ``(context, scenario, attempt, exception)``.
     """
     config = RetryConfig(
         max_retries=max_retries,
@@ -327,6 +348,7 @@ def setup_retry(
         retry_on=retry_on or [],
         retry_delay=retry_delay,
         backoff_factor=backoff_factor,
+        on_retry=on_retry,
     )
 
     context._behave_retry_config = config

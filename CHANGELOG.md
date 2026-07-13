@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.0] - 2026-07-13
+
+### Added
+
+- `on_retry` callback parameter in `RetryConfig` and `setup_retry` — invoked before each retry with `(context, scenario, attempt, exception)`
+- `RetryCallback` type alias exported from the package
+- `_get_last_exception` helper to retrieve the exception instance from a failed scenario
+- 8 new tests for `on_retry` callback behavior (called on retry, each retry, not called without callback, not called on pass, None exception, called before delay, stored in config)
+- `retry_on` now accepts string exception names in addition to classes — e.g. `["AssertionError", "json.JSONDecodeError"]`
+- `ExceptionFilter` type alias exported from the package
+- `_resolve_exception_filter` and `_import_exception` helpers for resolving string names to exception classes with caching
+- 8 new tests for string-based exception filtering (builtin match, builtin no-match, dotted path, mixed class+string, invalid builtin, invalid module, cache verification)
+
 ## [1.3.0] - 2026-07-13
 
 ### Added

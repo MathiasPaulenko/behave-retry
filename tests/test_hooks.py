@@ -594,3 +594,194 @@ class TestRetryDelay:
             mock_scenario.run(s, FakeRunner())
 
         mock_sleep.assert_called_once_with(2.0)
+
+
+class TestOnRetryCallback:
+    """Test the on_retry callback functionality."""
+
+    def test_callback_called_on_retry(self):
+        from unittest.mock import patch
+
+        ctx = FakeContext()
+        callback_calls: list[tuple] = []
+
+        def my_callback(context, scenario, attempt, exception):
+            callback_calls.append((context, scenario, attempt, exception))
+
+        setup_retry(ctx, max_retries=2, on_retry=my_callback)
+
+        call_count = 0
+
+        def fake_original_run(self, runner):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                self.status = "failed"
+                self.steps = [FakeStep(status="failed", error=AssertionError("boom"))]
+                return True
+            self.status = "passed"
+            self.steps = []
+            return False
+
+        with patch("behave.model.Scenario") as mock_scenario:
+            mock_scenario.run = staticmethod(fake_original_run)
+            _patch_scenario_run(ctx)
+
+            s = FakeScenario("Login", status="failed")
+            mock_scenario.run(s, FakeRunner())
+
+        assert len(callback_calls) == 1
+        assert callback_calls[0][0] is ctx
+        assert callback_calls[0][1] is s
+        assert callback_calls[0][2] == 1
+        assert isinstance(callback_calls[0][3], AssertionError)
+
+    def test_callback_called_each_retry(self):
+        from unittest.mock import patch
+
+        ctx = FakeContext()
+        callback_calls: list[int] = []
+
+        def my_callback(context, scenario, attempt, exception):
+            callback_calls.append(attempt)
+
+        setup_retry(ctx, max_retries=3, on_retry=my_callback)
+
+        call_count = 0
+
+        def fake_original_run(self, runner):
+            nonlocal call_count
+            call_count += 1
+            self.status = "failed"
+            return True
+
+        with patch("behave.model.Scenario") as mock_scenario:
+            mock_scenario.run = staticmethod(fake_original_run)
+            _patch_scenario_run(ctx)
+
+            s = FakeScenario("Login", status="failed")
+            mock_scenario.run(s, FakeRunner())
+
+        assert callback_calls == [1, 2, 3]
+
+    def test_no_callback_not_called(self):
+        from unittest.mock import patch
+
+        ctx = FakeContext()
+        callback_calls: list[int] = []
+
+        def my_callback(context, scenario, attempt, exception):
+            callback_calls.append(attempt)
+
+        setup_retry(ctx, max_retries=3)
+
+        call_count = 0
+
+        def fake_original_run(self, runner):
+            nonlocal call_count
+            call_count += 1
+            self.status = "failed"
+            return True
+
+        with patch("behave.model.Scenario") as mock_scenario:
+            mock_scenario.run = staticmethod(fake_original_run)
+            _patch_scenario_run(ctx)
+
+            s = FakeScenario("Login", status="failed")
+            mock_scenario.run(s, FakeRunner())
+
+        assert callback_calls == []
+
+    def test_callback_not_called_on_pass(self):
+        from unittest.mock import patch
+
+        ctx = FakeContext()
+        callback_calls: list[int] = []
+
+        def my_callback(context, scenario, attempt, exception):
+            callback_calls.append(attempt)
+
+        setup_retry(ctx, max_retries=3, on_retry=my_callback)
+
+        def fake_original_run(self, runner):
+            self.status = "passed"
+            return False
+
+        with patch("behave.model.Scenario") as mock_scenario:
+            mock_scenario.run = staticmethod(fake_original_run)
+            _patch_scenario_run(ctx)
+
+            s = FakeScenario("Login", status="passed")
+            mock_scenario.run(s, FakeRunner())
+
+        assert callback_calls == []
+
+    def test_callback_receives_none_exception_when_no_error(self):
+        from unittest.mock import patch
+
+        ctx = FakeContext()
+        received_exceptions: list[Exception | None] = []
+
+        def my_callback(context, scenario, attempt, exception):
+            received_exceptions.append(exception)
+
+        setup_retry(ctx, max_retries=2, on_retry=my_callback)
+
+        call_count = 0
+
+        def fake_original_run(self, runner):
+            nonlocal call_count
+            call_count += 1
+            self.status = "failed"
+            self.steps = [FakeStep(status="failed", error=None)]
+            return True
+
+        with patch("behave.model.Scenario") as mock_scenario:
+            mock_scenario.run = staticmethod(fake_original_run)
+            _patch_scenario_run(ctx)
+
+            s = FakeScenario("Login", status="failed")
+            mock_scenario.run(s, FakeRunner())
+
+        assert received_exceptions == [None, None]
+
+    def test_callback_called_before_delay(self):
+        from unittest.mock import patch
+
+        ctx = FakeContext()
+        call_order: list[str] = []
+
+        def my_callback(context, scenario, attempt, exception):
+            call_order.append("callback")
+
+        setup_retry(ctx, max_retries=1, retry_delay=5.0, on_retry=my_callback)
+
+        call_count = 0
+
+        def fake_original_run(self, runner):
+            nonlocal call_count
+            call_count += 1
+            self.status = "failed"
+            return True
+
+        with (
+            patch("behave.model.Scenario") as mock_scenario,
+            patch(
+                "behave_retry.hooks.time.sleep",
+                side_effect=lambda x: call_order.append("sleep"),
+            ),
+        ):
+            mock_scenario.run = staticmethod(fake_original_run)
+            _patch_scenario_run(ctx)
+
+            s = FakeScenario("Login", status="failed")
+            mock_scenario.run(s, FakeRunner())
+
+        assert call_order == ["callback", "sleep"]
+
+    def test_setup_retry_stores_callback(self):
+        ctx = FakeContext()
+        def my_callback(context, scenario, attempt, exception):
+            pass
+        setup_retry(ctx, max_retries=3, on_retry=my_callback)
+        assert ctx._behave_retry_config.on_retry is my_callback

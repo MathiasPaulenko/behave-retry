@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import importlib
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import Any
 
 
 def parse_retry_tag(tags: list[str] | None) -> int | None:
@@ -31,6 +34,92 @@ def parse_retry_tag(tags: list[str] | None) -> int | None:
     return None
 
 
+ExceptionFilter = type[Exception] | str
+"""Type alias for a single entry in ``retry_on`` — either an exception
+class or a string name (e.g. ``"AssertionError"`` or ``"mymod.MyError"``).
+"""
+
+
+RetryCallback = Callable[[Any, Any, int, Exception | None], None]
+"""Type alias for the ``on_retry`` callback.
+
+Args:
+    context: The behave context object.
+    scenario: The behave scenario that failed.
+    attempt: The attempt number that just failed (1-based).
+    exception: The exception that caused the failure, or ``None``.
+"""
+
+
+_EXCEPTION_CACHE: dict[str, type[Exception] | None] = {}
+
+
+def _resolve_exception_filter(entry: ExceptionFilter) -> type[Exception]:
+    """Resolve an exception filter entry to an exception class.
+
+    If *entry* is already a class, it is returned directly. If it is a
+    string, it is resolved to a class via ``importlib`` and cached.
+
+    Args:
+        entry: An exception class or a string name. Strings may be
+            bare names (``"AssertionError"``) or dotted paths
+            (``"mymod.MyError"``).
+
+    Returns:
+        The resolved exception class.
+
+    Raises:
+        TypeError: If *entry* is neither a class nor a string.
+        ImportError: If a string cannot be resolved to an exception class.
+    """
+    if isinstance(entry, str):
+        cached = _EXCEPTION_CACHE.get(entry)
+        if cached is not None:
+            return cached
+        resolved = _import_exception(entry)
+        _EXCEPTION_CACHE[entry] = resolved
+        return resolved
+    if isinstance(entry, type) and issubclass(entry, Exception):
+        return entry
+    raise TypeError(
+        f"retry_on entry must be an exception class or string, got {type(entry).__name__}"
+    )
+
+
+def _import_exception(name: str) -> type[Exception]:
+    """Import an exception class from a string name.
+
+    Bare names (``"AssertionError"``) are looked up in ``builtins``.
+    Dotted names (``"mymod.MyError"``) are split into module path and
+    class name, with the module imported via ``importlib``.
+
+    Args:
+        name: The exception class name to import.
+
+    Returns:
+        The imported exception class.
+
+    Raises:
+        ImportError: If the name cannot be resolved.
+    """
+    if "." in name:
+        module_path, class_name = name.rsplit(".", 1)
+        try:
+            module = importlib.import_module(module_path)
+        except ImportError as exc:
+            raise ImportError(f"Cannot import module '{module_path}' for '{name}'") from exc
+        cls = getattr(module, class_name, None)
+        if cls is None or not (isinstance(cls, type) and issubclass(cls, Exception)):
+            raise ImportError(f"'{name}' is not an exception class")
+        return cls
+    import builtins
+
+    cls = getattr(builtins, name, None)
+    if cls is None or not (isinstance(cls, type) and issubclass(cls, Exception)):
+        raise ImportError(f"'{name}' is not a built-in exception class")
+    return cls
+
+
 @dataclass(frozen=True)
 class RetryConfig:
     """Configuration for retry behavior.
@@ -38,18 +127,23 @@ class RetryConfig:
     Attributes:
         max_retries: Maximum number of retries per scenario (0 = no retry).
         retry_tags: Only retry scenarios with these tags. Empty = retry all.
-        retry_on: Only retry on these exception types. Empty = retry on any.
+        retry_on: Only retry on these exception types or names. Empty = retry on any.
+            Accepts exception classes (``AssertionError``) or strings
+            (``"AssertionError"``, ``"mymod.MyError"``).
         retry_delay: Seconds to wait before each retry (0 = no delay).
         backoff_factor: Multiplier applied to ``retry_delay`` after each retry.
             Must be >= 1.0. With ``retry_delay=2.0`` and ``backoff_factor=2.0``,
             delays are 2s, 4s, 8s, ...
+        on_retry: Optional callback invoked before each retry with
+            ``(context, scenario, attempt, exception)``.
     """
 
     max_retries: int = 0
     retry_tags: list[str] = field(default_factory=list)
-    retry_on: list[type[Exception]] = field(default_factory=list)
+    retry_on: list[ExceptionFilter] = field(default_factory=list)
     retry_delay: float = 0.0
     backoff_factor: float = 1.0
+    on_retry: RetryCallback | None = None
 
     def __post_init__(self) -> None:
         """Validate configuration after initialization.
@@ -109,6 +203,8 @@ class RetryConfig:
 
         If ``retry_on`` is empty, all exceptions trigger retry.
         Otherwise, the exception must be a subclass of one in the list.
+        String entries are resolved to exception classes on first use
+        and cached for subsequent calls.
 
         Args:
             exc: The exception type to check.
@@ -118,7 +214,7 @@ class RetryConfig:
         """
         if not self.retry_on:
             return True
-        return any(issubclass(exc, allowed) for allowed in self.retry_on)
+        return any(issubclass(exc, _resolve_exception_filter(entry)) for entry in self.retry_on)
 
     def get_scenario_retries(self, tags: list[str]) -> int:
         """Get max retries for a scenario, checking ``@retry:N`` tag override.
