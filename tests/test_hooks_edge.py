@@ -815,3 +815,123 @@ class TestPatchScenarioRunEdge:
 
         assert result is True
         assert call_count == 1
+
+
+class TestResetScenarioStateEdge:
+    """Edge cases for _reset_scenario_state covering step.reset, exception, error_message."""
+
+    def test_step_with_reset_method_called(self):
+        reset_called = []
+
+        class StepWithReset:
+            status = "failed"
+            exception = ValueError("boom")
+            error_message = "something"
+            error = ValueError("err")
+
+            def reset(self):
+                reset_called.append(True)
+
+        s = FakeScenario("X", status="failed")
+        s.steps = [StepWithReset()]
+        _reset_scenario_state(s)
+
+        assert reset_called == [True]
+        assert s.steps[0].exception is None
+        assert s.steps[0].error_message is None
+        assert s.steps[0].error is None
+
+    def test_step_with_exception_attr_cleared(self):
+        class StepWithException:
+            status = "failed"
+            exception = ValueError("boom")
+
+        s = FakeScenario("X", status="failed")
+        s.steps = [StepWithException()]
+        _reset_scenario_state(s)
+
+        assert s.steps[0].exception is None
+
+    def test_step_with_error_message_attr_cleared(self):
+        class StepWithErrorMessage:
+            status = "failed"
+            error_message = "failed badly"
+
+        s = FakeScenario("X", status="failed")
+        s.steps = [StepWithErrorMessage()]
+        _reset_scenario_state(s)
+
+        assert s.steps[0].error_message is None
+
+    def test_step_without_exception_attr_no_error(self):
+        class MinimalStep:
+            status = "failed"
+
+        s = FakeScenario("X", status="failed")
+        s.steps = [MinimalStep()]
+        _reset_scenario_state(s)
+
+        assert s.steps[0].status is None
+
+    def test_step_without_any_attrs_no_error(self):
+        class BareStep:
+            pass
+
+        s = FakeScenario("X", status="failed")
+        s.steps = [BareStep()]
+        _reset_scenario_state(s)
+
+    def test_scenario_without_clear_status_sets_none(self):
+        class ScenarioNoClear:
+            name = "X"
+            tags: list[str] = []
+            steps: list = []
+            status = "failed"
+
+        s = ScenarioNoClear()
+        _reset_scenario_state(s)
+        assert s.status is None
+
+
+class TestPatchScenarioRunImportError:
+    """Test _patch_scenario_run when behave.model is not available."""
+
+    def test_import_error_returns_silently(self):
+        ctx = FakeContext()
+        with patch.dict("sys.modules", {"behave.model": None}):
+            _patch_scenario_run(ctx)
+
+
+class TestRetryOnFilterWithRetries:
+    """Test that retry_on filter records stats when attempt > 1."""
+
+    def test_retry_on_filter_after_retry_records_stats(self):
+        ctx = FakeContext()
+        setup_retry(ctx, max_retries=3, retry_on=[ValueError])
+
+        call_count = 0
+
+        def fake_run(self, runner):
+            nonlocal call_count
+            call_count += 1
+            self.status = "failed"
+            if call_count == 1:
+                self.steps = [FakeStep(status="failed", error=ValueError("boom"))]
+            else:
+                self.steps = [FakeStep(status="failed", error=TypeError("boom"))]
+            return True
+
+        with patch("behave.model.Scenario") as mock_scenario:
+            mock_scenario.run = staticmethod(fake_run)
+            _patch_scenario_run(ctx)
+
+            s = FakeScenario("X", status="failed")
+            s.steps = [FakeStep(status="failed", error=ValueError("boom"))]
+            result = mock_scenario.run(s, FakeRunner())
+
+        assert result is True
+        assert call_count == 2
+        stats = ctx._behave_retry_stats
+        assert len(stats.scenarios_retried) == 1
+        assert stats.scenarios_retried[0].attempts == 2
+        assert stats.scenarios_retried[0].final_status == "failed"

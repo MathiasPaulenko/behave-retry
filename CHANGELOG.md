@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.1] - 2026-07-13
+
+### Added
+
+- 32 new edge case tests achieving 100% coverage across all modules
+- Tests for `_resolve_exception_filter` and `_import_exception` error paths (TypeError, ImportError)
+- Tests for `_reset_scenario_state` with `step.reset()`, `exception`, `error_message` attrs
+- Tests for `_patch_scenario_run` ImportError fallback
+- Tests for `retry_on` filter recording stats after retry
+- Tests for `parse_retry_tag` edge cases (empty, no colon, negative, duplicates, None)
+- Tests for `get_retry_delay` with attempt 0, negative, and large values
+- Tests for `should_retry_tag` with `@` prefix normalization
+
+### Fixed
+
+- mypy type errors resolved (`import-untyped`, `RetryStats | None`, `attr-defined`)
+
 ## [1.8.0] - 2026-07-13
 
 ### Fixed

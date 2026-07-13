@@ -207,3 +207,130 @@ class TestGetScenarioRetriesFeatureTags:
     def test_feature_tag_with_other_tags(self):
         config = RetryConfig(max_retries=3)
         assert config.get_scenario_retries(["@smoke"], feature_tags=["@flaky", "@retry:7"]) == 7
+
+
+class TestResolveExceptionFilterEdge:
+    """Edge cases for _resolve_exception_filter and _import_exception."""
+
+    def test_resolve_non_exception_class_raises_type_error(self):
+        from behave_retry.config import _resolve_exception_filter
+
+        with pytest.raises(TypeError, match="must be an exception class or string"):
+            _resolve_exception_filter(int)  # type: ignore[arg-type]
+
+    def test_resolve_non_class_non_string_raises_type_error(self):
+        from behave_retry.config import _resolve_exception_filter
+
+        with pytest.raises(TypeError, match="must be an exception class or string"):
+            _resolve_exception_filter(42)  # type: ignore[arg-type]
+
+    def test_dotted_path_not_exception_class_raises_import_error(self):
+        from behave_retry.config import _import_exception
+
+        with pytest.raises(ImportError, match="is not an exception class"):
+            _import_exception("os.path.join")
+
+    def test_dotted_path_nonexistent_module_raises_import_error(self):
+        from behave_retry.config import _import_exception
+
+        with pytest.raises(ImportError, match="Cannot import module"):
+            _import_exception("nonexistent_module_xyz.SomeError")
+
+    def test_builtin_not_exception_raises_import_error(self):
+        from behave_retry.config import _import_exception
+
+        with pytest.raises(ImportError, match="is not a built-in exception class"):
+            _import_exception("print")  # type: ignore[arg-type]
+
+    def test_builtin_nonexistent_raises_import_error(self):
+        from behave_retry.config import _import_exception
+
+        with pytest.raises(ImportError, match="is not a built-in exception class"):
+            _import_exception("NonexistentBuiltinError")
+
+
+class TestRetryConfigEdge:
+    """Edge cases for RetryConfig."""
+
+    def test_get_retry_delay_attempt_zero(self):
+        config = RetryConfig(max_retries=3, retry_delay=2.0, backoff_factor=2.0)
+        assert config.get_retry_delay(0) == 1.0
+
+    def test_get_retry_delay_negative_attempt(self):
+        config = RetryConfig(max_retries=3, retry_delay=2.0, backoff_factor=2.0)
+        assert config.get_retry_delay(-1) == 0.5
+
+    def test_get_retry_delay_large_attempt(self):
+        config = RetryConfig(max_retries=3, retry_delay=1.0, backoff_factor=2.0)
+        assert config.get_retry_delay(10) == 512.0
+
+    def test_should_retry_tag_empty_string_tag(self):
+        config = RetryConfig(max_retries=3, retry_tags=["flaky"])
+        assert config.should_retry_tag([""]) is False
+
+    def test_should_retry_tag_with_at_prefix_in_retry_tags(self):
+        config = RetryConfig(max_retries=3, retry_tags=["@flaky"])
+        assert config.should_retry_tag(["flaky"]) is True
+
+    def test_should_retry_tag_both_with_at_prefix(self):
+        config = RetryConfig(max_retries=3, retry_tags=["@flaky"])
+        assert config.should_retry_tag(["@flaky"]) is True
+
+    def test_should_retry_exception_subclass_match(self):
+        config = RetryConfig(max_retries=3, retry_on=[ValueError])
+        assert config.should_retry_exception(KeyError) is False
+
+    def test_should_retry_exception_with_string_and_class_mix(self):
+        config = RetryConfig(max_retries=3, retry_on=["ValueError", TypeError])
+        assert config.should_retry_exception(ValueError) is True
+        assert config.should_retry_exception(TypeError) is True
+
+    def test_parse_retry_tag_empty_string(self):
+        from behave_retry.config import parse_retry_tag
+
+        assert parse_retry_tag([""]) is None
+
+    def test_parse_retry_tag_retry_no_colon(self):
+        from behave_retry.config import parse_retry_tag
+
+        assert parse_retry_tag(["retry"]) is None
+
+    def test_parse_retry_tag_retry_empty_value(self):
+        from behave_retry.config import parse_retry_tag
+
+        assert parse_retry_tag(["retry:"]) is None
+
+    def test_parse_retry_tag_retry_negative(self):
+        from behave_retry.config import parse_retry_tag
+
+        assert parse_retry_tag(["retry:-1"]) == -1
+
+    def test_parse_retry_tag_multiple_retry_tags(self):
+        from behave_retry.config import parse_retry_tag
+
+        assert parse_retry_tag(["retry:3", "retry:5"]) == 3
+
+    def test_parse_retry_tag_none_input(self):
+        from behave_retry.config import parse_retry_tag
+
+        assert parse_retry_tag(None) is None
+
+    def test_parse_retry_tag_empty_list(self):
+        from behave_retry.config import parse_retry_tag
+
+        assert parse_retry_tag([]) is None
+
+    def test_max_total_retries_zero_is_valid(self):
+        config = RetryConfig(max_retries=3, max_total_retries=0)
+        assert config.max_total_retries == 0
+
+    def test_frozen_dataclass_cannot_set_attribute(self):
+        config = RetryConfig(max_retries=3)
+        with pytest.raises(AttributeError):
+            config.max_retries = 5  # type: ignore[misc]
+
+    def test_retry_on_with_invalid_type_raises_on_use(self):
+        from behave_retry.config import _resolve_exception_filter
+
+        with pytest.raises(TypeError, match="must be an exception class or string"):
+            _resolve_exception_filter(42)

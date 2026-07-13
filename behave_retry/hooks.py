@@ -244,7 +244,7 @@ def _patch_scenario_run(context: Any) -> None:
     Stats are recorded by the wrapper after the final attempt.
     """
     try:
-        from behave.model import Scenario
+        from behave.model import Scenario  # type: ignore[import-untyped]
     except ImportError:
         return
 
@@ -267,7 +267,7 @@ def _patch_scenario_run(context: Any) -> None:
         config: RetryConfig | None = getattr(context, "_behave_retry_config", None)
         if config is None:
             return original_run(self, runner)
-        stats: RetryStats = getattr(context, "_behave_retry_stats", None)
+        stats: RetryStats | None = getattr(context, "_behave_retry_stats", None)
         if stats is None:
             return original_run(self, runner)
         tags = _get_scenario_tags(self)
@@ -407,8 +407,8 @@ def setup_retry(
 
     context._behave_retry_config = config
     context._behave_retry_stats = RetryStats()
-    context._behave_retry_attempts: dict[str, int] = {}
-    context._behave_retry_total: int = 0
+    context._behave_retry_attempts = {}  # type: ignore[attr-defined]
+    context._behave_retry_total = 0  # type: ignore[attr-defined]
 
     logger.info(
         "Retry configured: max_retries=%d, retry_tags=%s, retry_on=%s, "
