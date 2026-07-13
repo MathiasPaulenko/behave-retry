@@ -142,7 +142,7 @@ class TestAfterScenarioHook:
         scenario.filename = "features/login.feature"
         scenario.line = 10
         after_scenario_hook(ctx, scenario)
-        assert "features/login.feature:10" in ctx._behave_retry_attempts
+        assert "features/login.feature:10:Login" in ctx._behave_retry_attempts
 
     def test_same_name_different_line_no_collision(self):
         ctx = FakeContext()
@@ -155,8 +155,8 @@ class TestAfterScenarioHook:
         s2.line = 15
         after_scenario_hook(ctx, s1)
         after_scenario_hook(ctx, s2)
-        assert ctx._behave_retry_attempts["features/test.feature:5"] == 1
-        assert ctx._behave_retry_attempts["features/test.feature:15"] == 1
+        assert ctx._behave_retry_attempts["features/test.feature:5:Outline"] == 1
+        assert ctx._behave_retry_attempts["features/test.feature:15:Outline"] == 1
 
 
 class TestRetryReport:
@@ -210,7 +210,7 @@ class TestHelpers:
         s = FakeScenario("X")
         s.filename = "f.feature"
         s.line = 5
-        assert _get_scenario_key(s) == "f.feature:5"
+        assert _get_scenario_key(s) == "f.feature:5:X"
 
     def test_get_scenario_key_name_fallback(self):
         s = FakeScenario("MyScenario")
@@ -220,7 +220,7 @@ class TestHelpers:
         s = FakeScenario("X")
         s.feature = "features/x.feature"
         s.line = 3
-        assert _get_scenario_key(s) == "features/x.feature:3"
+        assert _get_scenario_key(s) == "features/x.feature:3:X"
 
     def test_get_scenario_key_feature_object_ignored(self):
         s = FakeScenario("X")
@@ -1170,3 +1170,71 @@ class TestLogging:
 
         assert result == "Retry Summary: behave-retry not configured."
         assert not any("Retry summary" in r.message for r in caplog.records)
+
+
+class TestScenarioOutlineKey:
+    """Test that Scenario Outline examples get unique keys."""
+
+    def test_outline_examples_different_keys(self):
+        s1 = FakeScenario("Login with <user>")
+        s1.filename = "features/login.feature"
+        s1.line = 10
+
+        s2 = FakeScenario("Login with admin")
+        s2.filename = "features/login.feature"
+        s2.line = 10
+
+        assert _get_scenario_key(s1) != _get_scenario_key(s2)
+        assert _get_scenario_key(s1) == "features/login.feature:10:Login with <user>"
+        assert _get_scenario_key(s2) == "features/login.feature:10:Login with admin"
+
+    def test_same_name_same_line_same_key(self):
+        s1 = FakeScenario("Login")
+        s1.filename = "features/login.feature"
+        s1.line = 10
+
+        s2 = FakeScenario("Login")
+        s2.filename = "features/login.feature"
+        s2.line = 10
+
+        assert _get_scenario_key(s1) == _get_scenario_key(s2)
+
+    def test_outline_no_name_uses_filename_line_only(self):
+        s = FakeScenario("")
+        s.filename = "features/x.feature"
+        s.line = 5
+        assert _get_scenario_key(s) == "features/x.feature:5"
+
+    def test_outline_retries_independent(self):
+        from unittest.mock import patch
+
+        ctx = FakeContext()
+        setup_retry(ctx, max_retries=2)
+
+        call_counts: dict[str, int] = {}
+
+        def fake_original_run(self, runner):
+            key = self.name
+            call_counts[key] = call_counts.get(key, 0) + 1
+            if call_counts[key] == 1:
+                self.status = "failed"
+                return True
+            self.status = "passed"
+            return False
+
+        with patch("behave.model.Scenario") as mock_scenario:
+            mock_scenario.run = staticmethod(fake_original_run)
+            _patch_scenario_run(ctx)
+
+            s1 = FakeScenario("Login with admin", status="failed")
+            s1.filename = "features/login.feature"
+            s1.line = 10
+            mock_scenario.run(s1, FakeRunner())
+
+            s2 = FakeScenario("Login with guest", status="failed")
+            s2.filename = "features/login.feature"
+            s2.line = 10
+            mock_scenario.run(s2, FakeRunner())
+
+        assert call_counts["Login with admin"] == 2
+        assert call_counts["Login with guest"] == 2

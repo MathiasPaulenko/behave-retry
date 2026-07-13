@@ -64,17 +64,18 @@ def _get_feature_tags(scenario: Any) -> list[str]:
 
 
 def _get_scenario_key(scenario: Any) -> str:
-    """Get a unique key for a scenario using filename:line when available.
+    """Get a unique key for a scenario using filename:line:name when available.
 
     Falls back to the scenario name if filename or line are missing.
-    This prevents collisions between scenarios with the same name
-    (e.g. Scenario Outlines).
+    Including the name prevents collisions between examples of the same
+    Scenario Outline (which share filename and line but have different
+    names after placeholder substitution).
 
     Args:
         scenario: Behave scenario object.
 
     Returns:
-        A unique key string in ``filename:line`` format, or the
+        A unique key string in ``filename:line:name`` format, or the
         scenario name as fallback.
     """
     filename = getattr(scenario, "filename", None)
@@ -83,9 +84,12 @@ def _get_scenario_key(scenario: Any) -> str:
         if feature is not None and isinstance(feature, str):
             filename = feature
     line = getattr(scenario, "line", None)
+    name = getattr(scenario, "name", None)
     if filename and line is not None:
+        if name:
+            return f"{filename}:{line}:{name}"
         return f"{filename}:{line}"
-    return getattr(scenario, "name", str(scenario))
+    return name if name else str(scenario)
 
 
 def _get_scenario_name(scenario: Any) -> str:

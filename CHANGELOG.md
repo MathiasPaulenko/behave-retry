@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.0] - 2026-07-13
+
+### Fixed
+
+- `_get_scenario_key` now includes scenario name in the key (`filename:line:name`) to prevent collisions between Scenario Outline examples that share the same filename and line but have different names after placeholder substitution
+
+### Added
+
+- 4 new tests for Scenario Outline key uniqueness and independent retry behavior
+
 ## [1.7.0] - 2026-07-13
 
 ### Added

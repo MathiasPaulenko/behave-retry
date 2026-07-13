@@ -86,7 +86,7 @@ class TestHelpersEdge:
         s = FakeScenario("X")
         s.filename = "features/x.feature"
         s.line = 42
-        assert _get_scenario_key(s) == "features/x.feature:42"
+        assert _get_scenario_key(s) == "features/x.feature:42:X"
 
     def test_get_scenario_key_feature_object_not_string(self):
         s = FakeScenario("X")
@@ -359,7 +359,7 @@ class TestAfterScenarioHookEdge:
         s.filename = "f.feature"
         s.line = 10
         after_scenario_hook(ctx, s)
-        assert "f.feature:10" in ctx._behave_retry_attempts
+        assert "f.feature:10:X" in ctx._behave_retry_attempts
 
     def test_pre_existing_count_not_overwritten(self):
         ctx = FakeContext()
@@ -686,7 +686,7 @@ class TestPatchScenarioRunEdge:
 
         assert result is True
         stats = ctx._behave_retry_stats
-        assert stats.scenarios_retried[0].key == "features/test.feature:15"
+        assert stats.scenarios_retried[0].key == "features/test.feature:15:X"
 
     def test_multiple_scenarios_no_key_collision(self):
         ctx = FakeContext()
@@ -712,8 +712,8 @@ class TestPatchScenarioRunEdge:
 
         stats = ctx._behave_retry_stats
         assert len(stats.scenarios_retried) == 2
-        assert stats.scenarios_retried[0].key == "a.feature:5"
-        assert stats.scenarios_retried[1].key == "b.feature:10"
+        assert stats.scenarios_retried[0].key == "a.feature:5:SameName"
+        assert stats.scenarios_retried[1].key == "b.feature:10:SameName"
 
     def test_passes_on_retry_records_correct_exceptions(self):
         ctx = FakeContext()
