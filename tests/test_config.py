@@ -160,3 +160,37 @@ class TestGetScenarioRetries:
         config = RetryConfig(max_retries=3)
         assert config.get_scenario_retries(["@retry:-5"]) == 0
         assert config.get_scenario_retries(["retry:-1"]) == 0
+
+
+class TestGetScenarioRetriesFeatureTags:
+    def test_feature_tag_fallback(self):
+        config = RetryConfig(max_retries=3)
+        assert config.get_scenario_retries([], feature_tags=["@retry:5"]) == 5
+
+    def test_scenario_tag_takes_precedence_over_feature(self):
+        config = RetryConfig(max_retries=3)
+        assert config.get_scenario_retries(["@retry:2"], feature_tags=["@retry:5"]) == 2
+
+    def test_no_feature_tags_uses_global(self):
+        config = RetryConfig(max_retries=3)
+        assert config.get_scenario_retries([], feature_tags=[]) == 3
+
+    def test_no_feature_tags_param_uses_global(self):
+        config = RetryConfig(max_retries=3)
+        assert config.get_scenario_retries([]) == 3
+
+    def test_feature_tag_disable(self):
+        config = RetryConfig(max_retries=3)
+        assert config.get_scenario_retries([], feature_tags=["@retry:0"]) == 0
+
+    def test_scenario_disable_overrides_feature(self):
+        config = RetryConfig(max_retries=3)
+        assert config.get_scenario_retries(["@retry:0"], feature_tags=["@retry:5"]) == 0
+
+    def test_invalid_feature_tag_ignored(self):
+        config = RetryConfig(max_retries=3)
+        assert config.get_scenario_retries([], feature_tags=["@retry:abc"]) == 3
+
+    def test_feature_tag_with_other_tags(self):
+        config = RetryConfig(max_retries=3)
+        assert config.get_scenario_retries(["@smoke"], feature_tags=["@flaky", "@retry:7"]) == 7

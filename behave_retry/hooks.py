@@ -44,6 +44,22 @@ def _get_scenario_tags(scenario: Any) -> list[str]:
     return list(getattr(scenario, "tags", []) or [])
 
 
+def _get_feature_tags(scenario: Any) -> list[str]:
+    """Extract tags from the parent feature of a behave scenario.
+
+    Args:
+        scenario: Behave scenario object with a ``feature`` attribute.
+
+    Returns:
+        List of tag strings from the parent feature, or an empty list
+        if the scenario has no feature or the feature has no tags.
+    """
+    feature = getattr(scenario, "feature", None)
+    if feature is None or isinstance(feature, str):
+        return []
+    return list(getattr(feature, "tags", []) or [])
+
+
 def _get_scenario_key(scenario: Any) -> str:
     """Get a unique key for a scenario using filename:line when available.
 
@@ -248,11 +264,13 @@ def _patch_scenario_run(context: Any) -> None:
         if stats is None:
             return original_run(self, runner)
         tags = _get_scenario_tags(self)
+        feature_tags = _get_feature_tags(self)
         key = _get_scenario_key(self)
         name = _get_scenario_name(self)
-        max_for_scenario = config.get_scenario_retries(tags)
+        max_for_scenario = config.get_scenario_retries(tags, feature_tags)
 
-        if max_for_scenario == 0 or not config.should_retry_tag(tags):
+        all_tags = tags + feature_tags
+        if max_for_scenario == 0 or not config.should_retry_tag(all_tags):
             return original_run(self, runner)
 
         attempt = 0

@@ -5,6 +5,7 @@ from __future__ import annotations
 from behave_retry import RetryConfig, after_scenario_hook, retry_report, setup_retry
 from behave_retry.config import parse_retry_tag
 from behave_retry.hooks import (
+    _get_feature_tags,
     _get_scenario_exceptions,
     _get_scenario_key,
     _get_scenario_name,
@@ -24,6 +25,13 @@ class FakeStep:
         self.error = error
 
 
+class FakeFeature:
+    """Mimics behave.model.Feature."""
+
+    def __init__(self, tags: list[str] | None = None):
+        self.tags = tags or []
+
+
 class FakeScenario:
     """Mimics behave.model.Scenario."""
 
@@ -33,11 +41,13 @@ class FakeScenario:
         tags: list[str] | None = None,
         status: str = "failed",
         steps: list[FakeStep] | None = None,
+        feature: FakeFeature | None = None,
     ):
         self.name = name
         self.tags = tags or []
         self.status = status
         self.steps = steps or []
+        self.feature = feature
 
     def clear_status(self) -> None:
         self.status = "untested"
@@ -785,3 +795,136 @@ class TestOnRetryCallback:
             pass
         setup_retry(ctx, max_retries=3, on_retry=my_callback)
         assert ctx._behave_retry_config.on_retry is my_callback
+
+
+class TestGetFeatureTags:
+    """Test the _get_feature_tags helper."""
+
+    def test_with_feature_tags(self):
+        feature = FakeFeature(tags=["@retry:3", "@flaky"])
+        scenario = FakeScenario("Login", feature=feature)
+        assert _get_feature_tags(scenario) == ["@retry:3", "@flaky"]
+
+    def test_no_feature(self):
+        scenario = FakeScenario("Login")
+        assert _get_feature_tags(scenario) == []
+
+    def test_feature_none(self):
+        scenario = FakeScenario("Login", feature=None)
+        assert _get_feature_tags(scenario) == []
+
+    def test_feature_no_tags(self):
+        feature = FakeFeature(tags=[])
+        scenario = FakeScenario("Login", feature=feature)
+        assert _get_feature_tags(scenario) == []
+
+    def test_feature_string_fallback(self):
+        scenario = FakeScenario("Login")
+        scenario.feature = "Some Feature Name"
+        assert _get_feature_tags(scenario) == []
+
+
+class TestFeatureTagInheritance:
+    """Test that feature-level @retry:N tags are inherited by scenarios."""
+
+    def test_feature_retry_tag_inherited(self):
+        from unittest.mock import patch
+
+        ctx = FakeContext()
+        setup_retry(ctx, max_retries=0)
+
+        call_count = 0
+
+        def fake_original_run(self, runner):
+            nonlocal call_count
+            call_count += 1
+            if call_count <= 2:
+                self.status = "failed"
+                return True
+            self.status = "passed"
+            return False
+
+        feature = FakeFeature(tags=["@retry:3"])
+        with patch("behave.model.Scenario") as mock_scenario:
+            mock_scenario.run = staticmethod(fake_original_run)
+            _patch_scenario_run(ctx)
+
+            s = FakeScenario("Login", status="failed", feature=feature)
+            mock_scenario.run(s, FakeRunner())
+
+        assert call_count == 3
+
+    def test_scenario_tag_overrides_feature(self):
+        from unittest.mock import patch
+
+        ctx = FakeContext()
+        setup_retry(ctx, max_retries=0)
+
+        call_count = 0
+
+        def fake_original_run(self, runner):
+            nonlocal call_count
+            call_count += 1
+            self.status = "failed"
+            return True
+
+        feature = FakeFeature(tags=["@retry:5"])
+        with patch("behave.model.Scenario") as mock_scenario:
+            mock_scenario.run = staticmethod(fake_original_run)
+            _patch_scenario_run(ctx)
+
+            s = FakeScenario("Login", tags=["@retry:1"], status="failed", feature=feature)
+            mock_scenario.run(s, FakeRunner())
+
+        assert call_count == 2
+
+    def test_scenario_disable_overrides_feature(self):
+        from unittest.mock import patch
+
+        ctx = FakeContext()
+        setup_retry(ctx, max_retries=5)
+
+        call_count = 0
+
+        def fake_original_run(self, runner):
+            nonlocal call_count
+            call_count += 1
+            self.status = "failed"
+            return True
+
+        feature = FakeFeature(tags=["@retry:3"])
+        with patch("behave.model.Scenario") as mock_scenario:
+            mock_scenario.run = staticmethod(fake_original_run)
+            _patch_scenario_run(ctx)
+
+            s = FakeScenario("Login", tags=["@retry:0"], status="failed", feature=feature)
+            mock_scenario.run(s, FakeRunner())
+
+        assert call_count == 1
+
+    def test_feature_tag_with_retry_tags_filter(self):
+        from unittest.mock import patch
+
+        ctx = FakeContext()
+        setup_retry(ctx, max_retries=3, retry_tags=["@flaky"])
+
+        call_count = 0
+
+        def fake_original_run(self, runner):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                self.status = "failed"
+                return True
+            self.status = "passed"
+            return False
+
+        feature = FakeFeature(tags=["@flaky", "@retry:2"])
+        with patch("behave.model.Scenario") as mock_scenario:
+            mock_scenario.run = staticmethod(fake_original_run)
+            _patch_scenario_run(ctx)
+
+            s = FakeScenario("Login", status="failed", feature=feature)
+            mock_scenario.run(s, FakeRunner())
+
+        assert call_count == 2

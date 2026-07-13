@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.0] - 2026-07-13
+
+### Added
+
+- Feature-level `@retry:N` tag support — scenarios inherit retry count from their parent Feature tag when they don't have their own `@retry:N`
+- `_get_feature_tags` helper in `hooks.py` to extract tags from the parent Feature
+- `get_scenario_retries` now accepts an optional `feature_tags` parameter for fallback resolution
+- `should_retry_tag` now considers both scenario and feature tags for filtering
+- 13 new tests: 8 for `get_scenario_retries` with feature tags, 5 for `_get_feature_tags` helper and feature tag inheritance in `patched_run`
+
 ## [1.4.0] - 2026-07-13
 
 ### Added

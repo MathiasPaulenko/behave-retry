@@ -115,6 +115,26 @@ Scenario: Never retry this
 
 The first `@retry:N` tag wins. `@retry:0` disables retry for that scenario.
 
+You can also set `@retry:N` at the **Feature level** — scenarios without their own `@retry:N` tag inherit it from the Feature:
+
+```gherkin
+@retry:3
+Feature: Flaky scenarios
+
+  Scenario: A  # inherits retry:3
+    ...
+
+  @retry:0
+  Scenario: B  # override local, no retry
+    ...
+
+  @retry:5
+  Scenario: C  # override local, retry 5
+    ...
+```
+
+Scenario-level tags always take precedence over Feature-level tags.
+
 ### Retry stats
 
 ```python
@@ -212,7 +232,7 @@ Methods:
 
 - `should_retry_tag(tags) -> bool` — Check if scenario tags allow retry
 - `should_retry_exception(exc) -> bool` — Check if exception type allows retry
-- `get_scenario_retries(tags) -> int` — Get max retries for a scenario, checking `@retry:N` override
+- `get_scenario_retries(tags, feature_tags=None) -> int` — Get max retries, checking `@retry:N` on scenario then feature tags
 - `get_retry_delay(attempt) -> float` — Calculate delay for a given retry attempt (1-based)
 
 ### `RetryCallback`

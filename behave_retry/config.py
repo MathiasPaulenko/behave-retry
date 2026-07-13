@@ -216,20 +216,31 @@ class RetryConfig:
             return True
         return any(issubclass(exc, _resolve_exception_filter(entry)) for entry in self.retry_on)
 
-    def get_scenario_retries(self, tags: list[str]) -> int:
+    def get_scenario_retries(
+        self,
+        tags: list[str],
+        feature_tags: list[str] | None = None,
+    ) -> int:
         """Get max retries for a scenario, checking ``@retry:N`` tag override.
 
-        A ``@retry:N`` tag overrides the global ``max_retries``.
-        ``@retry:0`` disables retry for this scenario.
+        A ``@retry:N`` tag on the scenario overrides the global
+        ``max_retries``. If the scenario has no ``@retry:N`` tag, the
+        feature-level ``@retry:N`` tag is checked (if *feature_tags* is
+        provided). ``@retry:0`` disables retry for this scenario.
         Negative values are clamped to ``0`` (no retry).
 
         Args:
             tags: List of tag strings from a behave scenario.
+            feature_tags: Optional list of tag strings from the parent
+                feature. Used as fallback when the scenario has no
+                ``@retry:N`` tag.
 
         Returns:
             The effective max retries for this scenario.
         """
         override = parse_retry_tag(tags)
+        if override is None and feature_tags is not None:
+            override = parse_retry_tag(feature_tags)
         if override is not None:
             return max(0, override)
         return self.max_retries
