@@ -14,6 +14,7 @@ The user-facing API is:
 
 from __future__ import annotations
 
+import logging
 import time
 from typing import Any
 
@@ -26,6 +27,8 @@ __all__ = [
     "retry_report",
     "parse_retry_tag",
 ]
+
+logger = logging.getLogger("behave_retry")
 
 
 # ---------------------------------------------------------------------------
@@ -331,8 +334,17 @@ def _patch_scenario_run(context: Any) -> None:
 
             context._behave_retry_total = total_retries + 1
 
+            exc = _get_last_exception(self)
+            exc_name = type(exc).__name__ if exc is not None else "Unknown"
+            logger.info(
+                'Retrying "%s" (attempt %d/%d) after %s',
+                name,
+                attempt,
+                max_for_scenario,
+                exc_name,
+            )
+
             if config.on_retry is not None:
-                exc = _get_last_exception(self)
                 config.on_retry(context, self, attempt, exc)
 
             delay = config.get_retry_delay(attempt)
@@ -394,6 +406,17 @@ def setup_retry(
     context._behave_retry_attempts: dict[str, int] = {}
     context._behave_retry_total: int = 0
 
+    logger.info(
+        "Retry configured: max_retries=%d, retry_tags=%s, retry_on=%s, "
+        "retry_delay=%.1f, backoff_factor=%.1f, max_total_retries=%s",
+        config.max_retries,
+        config.retry_tags,
+        [r if isinstance(r, str) else r.__name__ for r in config.retry_on],
+        config.retry_delay,
+        config.backoff_factor,
+        config.max_total_retries,
+    )
+
     _patch_scenario_run(context)
 
 
@@ -439,4 +462,6 @@ def retry_report(context: Any) -> str:
     stats: RetryStats | None = getattr(context, "_behave_retry_stats", None)
     if stats is None:
         return "Retry Summary: behave-retry not configured."
-    return stats.summary()
+    summary = stats.summary()
+    logger.info("Retry summary:\n%s", summary)
+    return summary

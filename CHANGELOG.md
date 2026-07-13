@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.0] - 2026-07-13
+
+### Added
+
+- Logging integration via `logging.getLogger("behave_retry")` — logs config on `setup_retry`, each retry with scenario name/attempt/exception type, and summary on `retry_report`
+- 6 new tests for logging behavior using `caplog` (config log, retry log with name/attempt, exception type, no log on pass, summary log, no log when not configured)
+
 ## [1.6.0] - 2026-07-13
 
 ### Added

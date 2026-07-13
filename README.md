@@ -145,6 +145,37 @@ setup_retry(context, max_retries=5, max_total_retries=20)
 
 Once the global budget is exhausted, no more retries are attempted — remaining scenarios run only once. `None` (default) means unlimited.
 
+### Logging
+
+behave-retry logs via the standard `logging` module under the `behave_retry` logger:
+
+- **INFO** on `setup_retry` — configuration summary
+- **INFO** on each retry — `Retrying "scenario name" (attempt 1/3) after AssertionError`
+- **INFO** on `retry_report` — full summary
+
+To enable logging, configure the logger in your `environment.py`:
+
+```python
+import logging
+
+def before_all(context):
+    logging.basicConfig(level=logging.INFO)
+    setup_retry(context, max_retries=3)
+```
+
+Or use a dedicated handler:
+
+```python
+import logging
+
+def before_all(context):
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("[behave-retry] %(message)s"))
+    logging.getLogger("behave_retry").addHandler(handler)
+    logging.getLogger("behave_retry").setLevel(logging.INFO)
+    setup_retry(context, max_retries=3)
+```
+
 ### Retry stats
 
 ```python

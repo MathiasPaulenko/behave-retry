@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from behave_retry import RetryConfig, after_scenario_hook, retry_report, setup_retry
 from behave_retry.config import parse_retry_tag
 from behave_retry.hooks import (
@@ -1059,3 +1061,112 @@ class TestMaxTotalRetries:
         setup_retry(ctx, max_retries=3, max_total_retries=10)
         assert ctx._behave_retry_config.max_total_retries == 10
         assert ctx._behave_retry_total == 0
+
+
+class TestLogging:
+    """Test logging integration."""
+
+    def test_setup_retry_logs_config(self, caplog):
+        ctx = FakeContext()
+        with caplog.at_level(logging.INFO, logger="behave_retry"):
+            setup_retry(ctx, max_retries=3, retry_delay=1.0, backoff_factor=2.0)
+        assert any("Retry configured" in r.message for r in caplog.records)
+        assert any("max_retries=3" in r.message for r in caplog.records)
+
+    def test_retry_logs_scenario_name_and_attempt(self, caplog):
+        from unittest.mock import patch
+
+        ctx = FakeContext()
+        setup_retry(ctx, max_retries=2)
+
+        call_count = 0
+
+        def fake_original_run(self, runner):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                self.status = "failed"
+                return True
+            self.status = "passed"
+            return False
+
+        with (
+            caplog.at_level(logging.INFO, logger="behave_retry"),
+            patch("behave.model.Scenario") as mock_scenario,
+        ):
+            mock_scenario.run = staticmethod(fake_original_run)
+            _patch_scenario_run(ctx)
+
+            s = FakeScenario("Login", status="failed")
+            mock_scenario.run(s, FakeRunner())
+
+        retry_logs = [r for r in caplog.records if "Retrying" in r.message]
+        assert len(retry_logs) == 1
+        assert '"Login"' in retry_logs[0].message
+        assert "attempt 1/2" in retry_logs[0].message
+
+    def test_retry_logs_exception_type(self, caplog):
+        from unittest.mock import patch
+
+        ctx = FakeContext()
+        setup_retry(ctx, max_retries=1)
+
+        def fake_original_run(self, runner):
+            self.status = "failed"
+            return True
+
+        with (
+            caplog.at_level(logging.INFO, logger="behave_retry"),
+            patch("behave.model.Scenario") as mock_scenario,
+        ):
+            mock_scenario.run = staticmethod(fake_original_run)
+            _patch_scenario_run(ctx)
+
+            s = FakeScenario("Failing", status="failed")
+            s.steps = [FakeStep(status="failed", error=ValueError("boom"))]
+            mock_scenario.run(s, FakeRunner())
+
+        retry_logs = [r for r in caplog.records if "Retrying" in r.message]
+        assert len(retry_logs) == 1
+        assert "ValueError" in retry_logs[0].message
+
+    def test_no_retry_no_log(self, caplog):
+        from unittest.mock import patch
+
+        ctx = FakeContext()
+        setup_retry(ctx, max_retries=2)
+
+        def fake_original_run(self, runner):
+            self.status = "passed"
+            return False
+
+        with (
+            caplog.at_level(logging.INFO, logger="behave_retry"),
+            patch("behave.model.Scenario") as mock_scenario,
+        ):
+            mock_scenario.run = staticmethod(fake_original_run)
+            _patch_scenario_run(ctx)
+
+            s = FakeScenario("Passing", status="passed")
+            mock_scenario.run(s, FakeRunner())
+
+        retry_logs = [r for r in caplog.records if "Retrying" in r.message]
+        assert len(retry_logs) == 0
+
+    def test_retry_report_logs_summary(self, caplog):
+        ctx = FakeContext()
+        setup_retry(ctx, max_retries=3)
+
+        with caplog.at_level(logging.INFO, logger="behave_retry"):
+            retry_report(ctx)
+
+        assert any("Retry summary" in r.message for r in caplog.records)
+
+    def test_retry_report_not_configured_no_log(self, caplog):
+        ctx = FakeContext()
+
+        with caplog.at_level(logging.INFO, logger="behave_retry"):
+            result = retry_report(ctx)
+
+        assert result == "Retry Summary: behave-retry not configured."
+        assert not any("Retry summary" in r.message for r in caplog.records)
