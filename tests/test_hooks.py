@@ -113,6 +113,69 @@ class TestSetupRetry:
         assert ctx._behave_retry_config.backoff_factor == 3.0
 
 
+class TestSetupRetryEnvVars:
+    """Tests that setup_retry falls back to environment variables."""
+
+    def test_max_retries_reads_env_var(self, monkeypatch):
+        monkeypatch.setenv("BEHAVE_RETRY_MAX_RETRIES", "5")
+        for var in ("BEHAVE_RETRY_DELAY", "BEHAVE_RETRY_BACKOFF", "BEHAVE_RETRY_MAX_TOTAL"):
+            monkeypatch.delenv(var, raising=False)
+        ctx = FakeContext()
+        setup_retry(ctx)
+        assert ctx._behave_retry_config.max_retries == 5
+
+    def test_retry_delay_reads_env_var(self, monkeypatch):
+        monkeypatch.setenv("BEHAVE_RETRY_DELAY", "2.5")
+        for var in ("BEHAVE_RETRY_MAX_RETRIES", "BEHAVE_RETRY_BACKOFF", "BEHAVE_RETRY_MAX_TOTAL"):
+            monkeypatch.delenv(var, raising=False)
+        ctx = FakeContext()
+        setup_retry(ctx)
+        assert ctx._behave_retry_config.retry_delay == 2.5
+
+    def test_backoff_factor_reads_env_var(self, monkeypatch):
+        monkeypatch.setenv("BEHAVE_RETRY_BACKOFF", "1.5")
+        for var in ("BEHAVE_RETRY_MAX_RETRIES", "BEHAVE_RETRY_DELAY", "BEHAVE_RETRY_MAX_TOTAL"):
+            monkeypatch.delenv(var, raising=False)
+        ctx = FakeContext()
+        setup_retry(ctx)
+        assert ctx._behave_retry_config.backoff_factor == 1.5
+
+    def test_max_total_retries_reads_env_var(self, monkeypatch):
+        monkeypatch.setenv("BEHAVE_RETRY_MAX_TOTAL", "20")
+        for var in ("BEHAVE_RETRY_MAX_RETRIES", "BEHAVE_RETRY_DELAY", "BEHAVE_RETRY_BACKOFF"):
+            monkeypatch.delenv(var, raising=False)
+        ctx = FakeContext()
+        setup_retry(ctx)
+        assert ctx._behave_retry_config.max_total_retries == 20
+
+    def test_explicit_args_override_env_vars(self, monkeypatch):
+        monkeypatch.setenv("BEHAVE_RETRY_MAX_RETRIES", "9")
+        monkeypatch.setenv("BEHAVE_RETRY_DELAY", "9.9")
+        monkeypatch.setenv("BEHAVE_RETRY_BACKOFF", "9.9")
+        monkeypatch.setenv("BEHAVE_RETRY_MAX_TOTAL", "99")
+        ctx = FakeContext()
+        setup_retry(ctx, max_retries=3, retry_delay=1.0, backoff_factor=2.0, max_total_retries=10)
+        assert ctx._behave_retry_config.max_retries == 3
+        assert ctx._behave_retry_config.retry_delay == 1.0
+        assert ctx._behave_retry_config.backoff_factor == 2.0
+        assert ctx._behave_retry_config.max_total_retries == 10
+
+    def test_default_values_when_no_env_vars(self, monkeypatch):
+        for var in (
+            "BEHAVE_RETRY_MAX_RETRIES",
+            "BEHAVE_RETRY_DELAY",
+            "BEHAVE_RETRY_BACKOFF",
+            "BEHAVE_RETRY_MAX_TOTAL",
+        ):
+            monkeypatch.delenv(var, raising=False)
+        ctx = FakeContext()
+        setup_retry(ctx)
+        assert ctx._behave_retry_config.max_retries == 0
+        assert ctx._behave_retry_config.retry_delay == 0.0
+        assert ctx._behave_retry_config.backoff_factor == 1.0
+        assert ctx._behave_retry_config.max_total_retries is None
+
+
 class TestAfterScenarioHook:
     def test_no_config_does_nothing(self):
         ctx = FakeContext()

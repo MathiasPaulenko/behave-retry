@@ -67,6 +67,7 @@ That's it. Failed scenarios will now be re-executed up to 3 times automatically.
 - **On-retry callback** — custom logic before each retry (cleanup, screenshots, etc.)
 - **Flakiness stats** — human-readable summary and machine-readable JSON export
 - **Scenario Outline support** — unique keys per example, independent retry counts
+- **Environment variables** — control retry from `behave-runner` or CI without touching code
 - **Logging** — via standard `logging` module under `behave_retry` logger
 - **Type-safe** — `py.typed` marker included, full type hints, mypy clean
 
@@ -86,6 +87,30 @@ setup_retry(
 ```
 
 See the [configuration guide](https://mathiaspaulenko.github.io/behave-retry/configuration/) for full details.
+
+## Environment variables
+
+You can control retry behavior via environment variables. This is useful when running tests through `behave-runner`, CI pipelines, or any orchestration tool that passes configuration through the environment.
+
+```python
+# environment.py — no hard-coded values
+def before_all(context):
+    setup_retry(context)
+```
+
+```bash
+# CLI
+BEHAVE_RETRY_MAX_RETRIES=3 BEHAVE_RETRY_DELAY=2.0 BEHAVE_RETRY_BACKOFF=2.0 behave
+```
+
+| Env var | Type | Default | Maps to |
+|---|---|---|---|
+| `BEHAVE_RETRY_MAX_RETRIES` | `int` | `0` | `max_retries` |
+| `BEHAVE_RETRY_DELAY` | `float` | `0.0` | `retry_delay` |
+| `BEHAVE_RETRY_BACKOFF` | `float` | `1.0` | `backoff_factor` |
+| `BEHAVE_RETRY_MAX_TOTAL` | `int` | `None` | `max_total_retries` |
+
+Explicit arguments always win. If you call `setup_retry(context, max_retries=5)`, the env var is ignored.
 
 ## How it works
 

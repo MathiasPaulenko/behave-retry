@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path("..").resolve()))
 
 project = "behave-retry"
 author = "Mathias Paulenko"
-release = "1.8.2"
+release = "1.8.4"
 
 extensions = [
     "sphinx.ext.autodoc",

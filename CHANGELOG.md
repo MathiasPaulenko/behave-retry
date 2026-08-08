@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.4] - 2026-08-08
+
+### Added
+
+- `setup_retry()` now reads environment variables for numeric defaults:
+  - `BEHAVE_RETRY_MAX_RETRIES` → `max_retries` (default `0`)
+  - `BEHAVE_RETRY_DELAY` → `retry_delay` (default `0.0`)
+  - `BEHAVE_RETRY_BACKOFF` → `backoff_factor` (default `1.0`)
+  - `BEHAVE_RETRY_MAX_TOTAL` → `max_total_retries` (default `None`)
+- Explicit arguments always take precedence over environment variables.
+- New tests in `TestSetupRetryEnvVars` covering each env var and override precedence.
+
+### Changed
+
+- `setup_retry()` default values for numeric parameters changed to `None`.
+- README and docs updated with environment variable configuration guide and examples.
+
 ## [1.8.2] - 2026-07-13
 
 ### Added

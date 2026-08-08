@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "behave-retry"
-version = "1.8.3"
+version = "1.8.4"
 description = "Automatic retry for failed Behave scenarios — tag overrides, exception filtering, flakiness stats"
 readme = "README.md"
 license = "MIT"

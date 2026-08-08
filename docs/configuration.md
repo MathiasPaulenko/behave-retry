@@ -22,13 +22,50 @@ setup_retry(
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `context` | `Any` | — | Behave context object (required) |
-| `max_retries` | `int` | `0` | Maximum retries per scenario (0 = no retry) |
+| `max_retries` | `int \| None` | `None` → `BEHAVE_RETRY_MAX_RETRIES` or `0` | Maximum retries per scenario (0 = no retry) |
 | `retry_tags` | `list[str] \| None` | `None` → `[]` | Only retry scenarios with these tags (empty = retry all) |
 | `retry_on` | `list[type[Exception] \| str] \| None` | `None` → `[]` | Only retry on these exception types or names (empty = retry on any) |
-| `retry_delay` | `float` | `0.0` | Seconds to wait before each retry (0 = no delay) |
-| `backoff_factor` | `float` | `1.0` | Multiplier applied to `retry_delay` after each retry (must be >= 1.0) |
+| `retry_delay` | `float \| None` | `None` → `BEHAVE_RETRY_DELAY` or `0.0` | Seconds to wait before each retry (0 = no delay) |
+| `backoff_factor` | `float \| None` | `None` → `BEHAVE_RETRY_BACKOFF` or `1.0` | Multiplier applied to `retry_delay` after each retry (must be >= 1.0) |
 | `on_retry` | `Callable \| None` | `None` | Callback invoked before each retry with `(context, scenario, attempt, exception)` |
-| `max_total_retries` | `int \| None` | `None` | Global budget for total retries across all scenarios (None = unlimited) |
+| `max_total_retries` | `int \| None` | `None` → `BEHAVE_RETRY_MAX_TOTAL` or `None` | Global budget for total retries across all scenarios (None = unlimited) |
+
+When a numeric parameter is `None`, `setup_retry` reads the corresponding environment variable. When an argument is passed explicitly, it always takes precedence over the environment variable.
+
+## Environment variables
+
+When a numeric parameter of `setup_retry` is left as `None`, the value is read from an environment variable. This lets `behave-runner`, CI systems, or any orchestration tool control retry behavior without changing `environment.py`.
+
+| Env var | Type | Default | Maps to |
+|---|---|---|---|
+| `BEHAVE_RETRY_MAX_RETRIES` | `int` | `0` | `max_retries` |
+| `BEHAVE_RETRY_DELAY` | `float` | `0.0` | `retry_delay` |
+| `BEHAVE_RETRY_BACKOFF` | `float` | `1.0` | `backoff_factor` |
+| `BEHAVE_RETRY_MAX_TOTAL` | `int` | `None` | `max_total_retries` |
+
+### Example
+
+```python
+# environment.py — empty setup_retry call
+def before_all(context):
+    setup_retry(context)
+```
+
+```bash
+# CLI
+BEHAVE_RETRY_MAX_RETRIES=3 BEHAVE_RETRY_DELAY=2.0 BEHAVE_RETRY_BACKOFF=2.0 behave
+```
+
+### Precedence
+
+Explicit arguments always win over environment variables:
+
+```python
+setup_retry(context, max_retries=5)
+# max_retries is 5 even if BEHAVE_RETRY_MAX_RETRIES=10
+```
+
+Environment variables only apply when the corresponding parameter is `None` (the default). Non-numeric parameters (`retry_tags`, `retry_on`, `on_retry`) are never read from environment variables.
 
 ## `RetryConfig`
 

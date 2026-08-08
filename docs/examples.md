@@ -18,6 +18,33 @@ def after_all(context):
     print(retry_report(context))
 ```
 
+## Environment variables
+
+Control retry from `behave-runner` or CI without touching code:
+
+```python
+# environment.py — empty setup reads env vars
+def before_all(context):
+    setup_retry(context)
+```
+
+```bash
+# CLI
+BEHAVE_RETRY_MAX_RETRIES=3 \
+BEHAVE_RETRY_DELAY=2.0 \
+BEHAVE_RETRY_BACKOFF=2.0 \
+BEHAVE_RETRY_MAX_TOTAL=20 \
+behave
+```
+
+You can mix env vars with explicit arguments. Explicit arguments always win:
+
+```python
+# max_retries is 5 regardless of BEHAVE_RETRY_MAX_RETRIES
+def before_all(context):
+    setup_retry(context, max_retries=5)
+```
+
 ## Full `environment.py`
 
 All features enabled:

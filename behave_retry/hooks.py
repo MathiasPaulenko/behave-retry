@@ -15,6 +15,7 @@ The user-facing API is:
 from __future__ import annotations
 
 import logging
+import os
 import time
 from typing import Any
 
@@ -352,11 +353,11 @@ def _patch_scenario_run(context: Any) -> None:
 
 def setup_retry(
     context: Any,
-    max_retries: int = 0,
+    max_retries: int | None = None,
     retry_tags: list[str] | None = None,
     retry_on: list[ExceptionFilter] | None = None,
-    retry_delay: float = 0.0,
-    backoff_factor: float = 1.0,
+    retry_delay: float | None = None,
+    backoff_factor: float | None = None,
     on_retry: RetryCallback | None = None,
     max_total_retries: int | None = None,
 ) -> None:
@@ -367,19 +368,37 @@ def setup_retry(
     This patches ``behave.model.Scenario.run`` so that failed scenarios
     are automatically re-run up to ``max_retries`` times.
 
+    Parameters with a default of ``None`` are read from environment
+    variables when not provided explicitly. This lets behave-runner or
+    CI systems control retry behavior without modifying ``environment.py``.
+
     Args:
         context: Behave context object.
         max_retries: Maximum retries per scenario (0 = no retry).
+            If ``None``, reads ``BEHAVE_RETRY_MAX_RETRIES`` (default ``0``).
         retry_tags: Only retry scenarios with these tags.
         retry_on: Only retry on these exception types.
         retry_delay: Seconds to wait before each retry (0 = no delay).
+            If ``None``, reads ``BEHAVE_RETRY_DELAY`` (default ``0.0``).
         backoff_factor: Multiplier applied to ``retry_delay`` after each
             retry. Must be >= 1.0.
+            If ``None``, reads ``BEHAVE_RETRY_BACKOFF`` (default ``1.0``).
         on_retry: Optional callback invoked before each retry with
             ``(context, scenario, attempt, exception)``.
         max_total_retries: Global budget for total retries across all
             scenarios. ``None`` = unlimited.
+            If ``None``, reads ``BEHAVE_RETRY_MAX_TOTAL`` (default ``None``).
     """
+    if max_retries is None:
+        max_retries = int(os.environ.get("BEHAVE_RETRY_MAX_RETRIES", "0"))
+    if retry_delay is None:
+        retry_delay = float(os.environ.get("BEHAVE_RETRY_DELAY", "0.0"))
+    if backoff_factor is None:
+        backoff_factor = float(os.environ.get("BEHAVE_RETRY_BACKOFF", "1.0"))
+    if max_total_retries is None:
+        val = os.environ.get("BEHAVE_RETRY_MAX_TOTAL")
+        max_total_retries = int(val) if val else None
+
     config = RetryConfig(
         max_retries=max_retries,
         retry_tags=retry_tags or [],

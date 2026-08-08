@@ -63,6 +63,7 @@ Behave has no built-in retry mechanism. When a scenario fails due to flakiness �
 - **On-retry callback** — custom logic before each retry (cleanup, screenshots, logging)
 - **Flakiness stats** — human-readable summary and machine-readable JSON export
 - **Scenario Outline support** — unique keys per example, independent retry counts
+- **Environment variables** — control retry from `behave-runner` or CI without touching code
 - **Zero runtime dependencies** — only `behave` needed for development
 - **Type-safe** — `py.typed` marker, full type hints, mypy clean
 
