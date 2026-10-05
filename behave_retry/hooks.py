@@ -25,6 +25,7 @@ from .stats import RetryStats
 __all__ = [
     "setup_retry",
     "after_scenario_hook",
+    "get_stats",
     "retry_report",
     "parse_retry_tag",
 ]
@@ -35,6 +36,71 @@ logger = logging.getLogger("behave_retry")
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+def _env_int(name: str, default: int) -> int:
+    """Read an integer environment variable with a clear error message.
+
+    Args:
+        name: Environment variable name.
+        default: Value returned when the variable is unset or empty.
+
+    Returns:
+        The parsed integer value, or *default*.
+
+    Raises:
+        ValueError: If the variable is set but not a valid integer.
+    """
+    val = os.environ.get(name)
+    if not val:
+        return default
+    try:
+        return int(val)
+    except ValueError:
+        raise ValueError(f"{name} must be an int, got {val!r}") from None
+
+
+def _env_int_optional(name: str) -> int | None:
+    """Read an optional integer environment variable.
+
+    Args:
+        name: Environment variable name.
+
+    Returns:
+        The parsed integer value, or ``None`` when unset or empty.
+
+    Raises:
+        ValueError: If the variable is set but not a valid integer.
+    """
+    val = os.environ.get(name)
+    if not val:
+        return None
+    try:
+        return int(val)
+    except ValueError:
+        raise ValueError(f"{name} must be an int, got {val!r}") from None
+
+
+def _env_float(name: str, default: float) -> float:
+    """Read a float environment variable with a clear error message.
+
+    Args:
+        name: Environment variable name.
+        default: Value returned when the variable is unset or empty.
+
+    Returns:
+        The parsed float value, or *default*.
+
+    Raises:
+        ValueError: If the variable is set but not a valid float.
+    """
+    val = os.environ.get(name)
+    if not val:
+        return default
+    try:
+        return float(val)
+    except ValueError:
+        raise ValueError(f"{name} must be a float, got {val!r}") from None
+
 
 def _get_scenario_tags(scenario: Any) -> list[str]:
     """Extract tags from a behave scenario.
@@ -68,9 +134,9 @@ def _get_scenario_key(scenario: Any) -> str:
     """Get a unique key for a scenario using filename:line:name when available.
 
     Falls back to the scenario name if filename or line are missing.
-    Including the name prevents collisions between examples of the same
-    Scenario Outline (which share filename and line but have different
-    names after placeholder substitution).
+    Behave already assigns each Scenario Outline example the line of its
+    ``Examples`` row, so ``filename:line`` is unique; the name is appended
+    for readability and as a guard for scenarios without line information.
 
     Args:
         scenario: Behave scenario object.
@@ -140,6 +206,45 @@ def _step_failed(step: Any) -> bool:
     return status in ("failed", "error")
 
 
+def _get_all_steps(scenario: Any) -> list[Any]:
+    """Return all executable steps of a scenario, including Background steps.
+
+    Behave stores per-scenario copies of Background steps in
+    ``scenario._background_steps`` and exposes them through
+    ``scenario.all_steps``. Falls back to ``scenario.steps`` for
+    objects without ``all_steps`` (e.g. duck-typed test doubles).
+
+    Args:
+        scenario: Behave scenario object.
+
+    Returns:
+        List of step objects (own steps plus Background steps).
+    """
+    all_steps = getattr(scenario, "all_steps", None)
+    if all_steps is not None:
+        return list(all_steps)
+    return list(getattr(scenario, "steps", []) or [])
+
+
+def _has_unrunnable_step(scenario: Any) -> bool:
+    """Check if a scenario contains a step that can never pass on retry.
+
+    Steps with status ``"undefined"`` (no matching step definition) or
+    ``"pending"`` (explicitly marked as work in progress) cannot change
+    outcome by re-running, so retrying is pointless.
+
+    Args:
+        scenario: Behave scenario object.
+
+    Returns:
+        ``True`` if any step has status ``"undefined"`` or ``"pending"``.
+    """
+    return any(
+        _get_step_status(step) in ("undefined", "pending")
+        for step in _get_all_steps(scenario)
+    )
+
+
 def _get_scenario_exceptions(scenario: Any) -> list[str]:
     """Extract exception type names from failed steps in a scenario.
 
@@ -150,7 +255,7 @@ def _get_scenario_exceptions(scenario: Any) -> list[str]:
         List of exception class names (e.g. ``["AssertionError"]``).
     """
     exceptions: list[str] = []
-    for step in getattr(scenario, "steps", []) or []:
+    for step in _get_all_steps(scenario):
         if _step_failed(step):
             error = getattr(step, "exception", None) or getattr(step, "error", None)
             if error is not None:
@@ -182,8 +287,7 @@ def _get_last_exception(scenario: Any) -> Exception | None:
         The exception instance of the last failed step, or ``None`` if
         no failed step has an exception.
     """
-    steps = getattr(scenario, "steps", []) or []
-    for step in reversed(steps):
+    for step in reversed(_get_all_steps(scenario)):
         if _step_failed(step):
             error = getattr(step, "exception", None) or getattr(step, "error", None)
             if error is not None:
@@ -196,13 +300,13 @@ def _reset_scenario_state(scenario: Any) -> None:
 
     Args:
         scenario: Behave scenario object with ``clear_status`` and
-            ``steps`` attributes.
+            ``all_steps``/``steps`` attributes.
     """
     if hasattr(scenario, "clear_status"):
         scenario.clear_status()
     else:
         scenario.status = None
-    for step in getattr(scenario, "steps", []) or []:
+    for step in _get_all_steps(scenario):
         if hasattr(step, "reset"):
             step.reset()
         else:
@@ -213,6 +317,109 @@ def _reset_scenario_state(scenario: Any) -> None:
             step.error_message = None
         if hasattr(step, "error"):
             step.error = None
+
+
+def _run_quiet(run: Any, scenario: Any, runner: Any) -> bool:
+    """Run a scenario attempt with behave formatters suppressed.
+
+    Behave re-emits ``scenario``/``step``/``match``/``result`` events to
+    its formatters on every ``Scenario.run`` call, so retried scenarios
+    would appear once per attempt in reports. All attempts run quietly
+    and the final state is emitted once via ``_emit_scenario_result``.
+
+    Args:
+        run: The original ``Scenario.run`` method.
+        scenario: The scenario being run.
+        runner: The behave runner instance.
+
+    Returns:
+        ``False`` if the scenario passed, ``True`` if it failed.
+    """
+    formatters = getattr(runner, "formatters", None)
+    if formatters is None:
+        return run(scenario, runner)
+    runner.formatters = []
+    try:
+        return run(scenario, runner)
+    finally:
+        runner.formatters = formatters
+
+
+# Step statuses that count as "executed" — they receive match()/result()
+# events when the final scenario state is emitted to formatters.
+_EXECUTED_STEP_STATUSES = ("passed", "failed", "error", "undefined", "pending")
+
+
+def _resolve_step_match(runner: Any, step: Any) -> Any:
+    """Re-resolve the match for an executed step.
+
+    Behave keeps the ``Match`` object as a local in ``step.run`` — it is
+    not stored on the step. To emit ``formatter.match()`` after the run
+    finishes, the step definition lookup is repeated. Returns a
+    ``NoMatch`` for undefined steps, or ``None`` when no registry is
+    available (e.g. test doubles).
+
+    Args:
+        runner: The behave runner instance.
+        step: The step to resolve a match for.
+
+    Returns:
+        A ``Match``/``NoMatch`` object, or ``None``.
+    """
+    step_registry = getattr(runner, "step_registry", None)
+    if step_registry is None:
+        return None
+    match = step_registry.find_match(step)
+    if match is not None:
+        return match
+    try:
+        from behave.matchers import NoMatch  # type: ignore[import-untyped]
+    except ImportError:
+        return None
+    return NoMatch()
+
+
+def _emit_scenario_result(scenario: Any, runner: Any) -> None:
+    """Emit the final scenario state to behave formatters exactly once.
+
+    Retried scenarios run with formatters suppressed so each scenario
+    appears a single time in generated reports, reflecting the outcome
+    of the last attempt — mirroring what an unretried ``Scenario.run``
+    emits: ``scenario()``, then ``step()``/``match()``/``result()`` per
+    executed step.
+
+    Args:
+        scenario: The scenario whose final state is emitted.
+        runner: The behave runner instance.
+    """
+    formatters = getattr(runner, "formatters", None) or []
+    if not formatters:
+        return
+    steps = _get_all_steps(scenario)
+    for formatter in formatters:
+        scenario_event = getattr(formatter, "scenario", None)
+        if scenario_event is not None:
+            scenario_event(scenario)
+        step_event = getattr(formatter, "step", None)
+        match_event = getattr(formatter, "match", None)
+        result_event = getattr(formatter, "result", None)
+        # Behave emits all step() events before running any step, then
+        # match()/result() per executed step — the same order is required
+        # here (e.g. pretty computes step indentations on the first match
+        # assuming every step() already arrived).
+        for step in steps:
+            if step_event is not None:
+                step_event(step)
+        for step in steps:
+            if _get_step_status(step) not in _EXECUTED_STEP_STATUSES:
+                continue
+            match = getattr(step, "match", None)
+            if match is None:
+                match = _resolve_step_match(runner, step)
+            if match is not None and match_event is not None:
+                match_event(match)
+            if result_event is not None:
+                result_event(step)
 
 
 # ---------------------------------------------------------------------------
@@ -231,6 +438,7 @@ def _patch_scenario_run(context: Any) -> None:
     try:
         from behave.model import Scenario  # type: ignore[import-untyped]
     except ImportError:
+        logger.warning("behave is not installed; retry is disabled")
         return
 
     original_run = Scenario.run
@@ -249,10 +457,16 @@ def _patch_scenario_run(context: Any) -> None:
             ``False`` if the scenario passed, ``True`` if it failed
             after exhausting all retries.
         """
-        config: RetryConfig | None = getattr(context, "_behave_retry_config", None)
+        # Prefer the runner's live context over the one captured at patch
+        # time, so a second behave run in the same process uses its own
+        # config and stats instead of stale state from the first run.
+        ctx = getattr(runner, "context", None)
+        if ctx is None:
+            ctx = context
+        config: RetryConfig | None = getattr(ctx, "_behave_retry_config", None)
         if config is None:
             return original_run(self, runner)
-        stats: RetryStats | None = getattr(context, "_behave_retry_stats", None)
+        stats: RetryStats | None = getattr(ctx, "_behave_retry_stats", None)
         if stats is None:
             return original_run(self, runner)
         tags = _get_scenario_tags(self)
@@ -261,15 +475,23 @@ def _patch_scenario_run(context: Any) -> None:
         name = _get_scenario_name(self)
         max_for_scenario = config.get_scenario_retries(tags, feature_tags)
 
-        all_tags = tags + feature_tags
+        # effective_tags includes feature- and rule-level tags in behave 1.3+.
+        effective_tags = getattr(self, "effective_tags", None)
+        all_tags = list(effective_tags) if effective_tags else tags + feature_tags
         if max_for_scenario == 0 or not config.should_retry_tag(all_tags):
             return original_run(self, runner)
 
+        final_failed = True
         attempt = 0
         while True:
             attempt += 1
-            failed = original_run(self, runner)
-            context._behave_retry_attempts[key] = attempt
+            # Formatters are suppressed on every attempt; the final
+            # scenario state is emitted once after the loop so reports
+            # contain a single entry per scenario.
+            failed = _run_quiet(original_run, self, runner)
+            attempts = getattr(ctx, "_behave_retry_attempts", None)
+            if attempts is not None:
+                attempts[key] = attempt
 
             if not failed:
                 if attempt > 1:
@@ -280,7 +502,12 @@ def _patch_scenario_run(context: Any) -> None:
                         exceptions=[],
                         key=key,
                     )
-                return False
+                final_failed = False
+                break
+
+            # Undefined or pending steps can never pass on retry.
+            if _has_unrunnable_step(self):
+                break
 
             exc_type = _get_last_exception_type(self)
             if config.retry_on and (
@@ -295,7 +522,7 @@ def _patch_scenario_run(context: Any) -> None:
                         exceptions=_get_scenario_exceptions(self),
                         key=key,
                     )
-                return True
+                break
 
             if attempt > max_for_scenario:
                 stats.update_retry(
@@ -305,9 +532,9 @@ def _patch_scenario_run(context: Any) -> None:
                     exceptions=_get_scenario_exceptions(self),
                     key=key,
                 )
-                return True
+                break
 
-            total_retries = getattr(context, "_behave_retry_total", 0)
+            total_retries = getattr(ctx, "_behave_retry_total", 0)
             if (
                 config.max_total_retries is not None
                 and total_retries >= config.max_total_retries
@@ -320,9 +547,9 @@ def _patch_scenario_run(context: Any) -> None:
                         exceptions=_get_scenario_exceptions(self),
                         key=key,
                     )
-                return True
+                break
 
-            context._behave_retry_total = total_retries + 1
+            ctx._behave_retry_total = total_retries + 1
 
             exc = _get_last_exception(self)
             exc_name = type(exc).__name__ if exc is not None else "Unknown"
@@ -335,13 +562,23 @@ def _patch_scenario_run(context: Any) -> None:
             )
 
             if config.on_retry is not None:
-                config.on_retry(context, self, attempt, exc)
+                try:
+                    config.on_retry(ctx, self, attempt, exc)
+                except Exception:
+                    logger.exception(
+                        'on_retry callback raised for "%s" (attempt %d)',
+                        name,
+                        attempt,
+                    )
 
             delay = config.get_retry_delay(attempt)
             if delay > 0:
                 time.sleep(delay)
 
             _reset_scenario_state(self)
+
+        _emit_scenario_result(self, runner)
+        return final_failed
 
     Scenario.run = patched_run
     patched_run._behave_retry_patched = True  # type: ignore[attr-defined]
@@ -390,14 +627,13 @@ def setup_retry(
             If ``None``, reads ``BEHAVE_RETRY_MAX_TOTAL`` (default ``None``).
     """
     if max_retries is None:
-        max_retries = int(os.environ.get("BEHAVE_RETRY_MAX_RETRIES", "0"))
+        max_retries = _env_int("BEHAVE_RETRY_MAX_RETRIES", 0)
     if retry_delay is None:
-        retry_delay = float(os.environ.get("BEHAVE_RETRY_DELAY", "0.0"))
+        retry_delay = _env_float("BEHAVE_RETRY_DELAY", 0.0)
     if backoff_factor is None:
-        backoff_factor = float(os.environ.get("BEHAVE_RETRY_BACKOFF", "1.0"))
+        backoff_factor = _env_float("BEHAVE_RETRY_BACKOFF", 1.0)
     if max_total_retries is None:
-        val = os.environ.get("BEHAVE_RETRY_MAX_TOTAL")
-        max_total_retries = int(val) if val else None
+        max_total_retries = _env_int_optional("BEHAVE_RETRY_MAX_TOTAL")
 
     config = RetryConfig(
         max_retries=max_retries,
@@ -456,6 +692,23 @@ def after_scenario_hook(context: Any, scenario: Any) -> None:
         attempts[key] = 1
 
 
+def get_stats(context: Any) -> RetryStats | None:
+    """Get the retry statistics collected during the run.
+
+    Use this for programmatic access to retry data (e.g. JSON reports
+    via ``stats.to_dict()``) instead of reading the private
+    ``context._behave_retry_stats`` attribute.
+
+    Args:
+        context: Behave context object.
+
+    Returns:
+        The ``RetryStats`` instance, or ``None`` if ``setup_retry``
+        was not called.
+    """
+    return getattr(context, "_behave_retry_stats", None)
+
+
 def retry_report(context: Any) -> str:
     """Get a human-readable retry summary.
 
@@ -467,7 +720,7 @@ def retry_report(context: Any) -> str:
     Returns:
         A formatted summary string of retry statistics.
     """
-    stats: RetryStats | None = getattr(context, "_behave_retry_stats", None)
+    stats = get_stats(context)
     if stats is None:
         return "Retry Summary: behave-retry not configured."
     summary = stats.summary()

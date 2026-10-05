@@ -67,8 +67,28 @@ class TestRetryStatsEdge:
     def test_add_retry_zero_attempts(self):
         stats = RetryStats()
         stats.add_retry("X", attempts=0, final_status="failed")
-        assert stats.total_retries == -1
+        # Clamped to 0 — attempts - 1 can never make the counter negative.
+        assert stats.total_retries == 0
         assert len(stats.scenarios_retried) == 1
+
+    def test_add_retry_negative_attempts_clamped(self):
+        stats = RetryStats()
+        stats.add_retry("X", attempts=-2, final_status="failed")
+        assert stats.total_retries == 0
+
+    def test_update_retry_clamps_total(self):
+        stats = RetryStats()
+        stats.add_retry("X", attempts=0, final_status="failed")
+        stats.update_retry("X", attempts=3, final_status="passed")
+        assert stats.total_retries == 2
+
+    def test_to_dict_includes_key_field(self):
+        sr = ScenarioRetry(scenario="X", attempts=2, final_status="passed", key="f:5:X")
+        assert sr.to_dict()["key"] == "f:5:X"
+
+    def test_to_dict_key_defaults_none(self):
+        sr = ScenarioRetry(scenario="X", attempts=2, final_status="passed")
+        assert sr.to_dict()["key"] is None
 
     def test_add_retry_one_attempt(self):
         stats = RetryStats()

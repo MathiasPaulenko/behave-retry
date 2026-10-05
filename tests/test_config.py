@@ -27,20 +27,14 @@ class TestRetryConfigDefaults:
         assert config.max_total_retries is None
 
     def test_negative_max_retries_raises(self):
-        import pytest
-
         with pytest.raises(ValueError, match="max_retries must be >= 0"):
             RetryConfig(max_retries=-1)
 
     def test_negative_retry_delay_raises(self):
-        import pytest
-
         with pytest.raises(ValueError, match="retry_delay must be >= 0"):
             RetryConfig(retry_delay=-1.0)
 
     def test_backoff_factor_below_one_raises(self):
-        import pytest
-
         with pytest.raises(ValueError, match="backoff_factor must be >= 1.0"):
             RetryConfig(backoff_factor=0.5)
 
@@ -58,8 +52,6 @@ class TestRetryConfigDefaults:
 
     def test_frozen(self):
         config = RetryConfig(max_retries=3)
-        import pytest
-
         with pytest.raises(AttributeError):
             config.max_retries = 5
 
@@ -122,15 +114,11 @@ class TestShouldRetryException:
         assert config.should_retry_exception(KeyError) is False
 
     def test_string_invalid_builtin_raises(self):
-        import pytest
-
         config = RetryConfig(max_retries=3, retry_on=["NotARealException"])
         with pytest.raises(ImportError, match="NotARealException"):
             config.should_retry_exception(AssertionError)
 
     def test_string_invalid_module_raises(self):
-        import pytest
-
         config = RetryConfig(max_retries=3, retry_on=["nonexistent_module.MyError"])
         with pytest.raises(ImportError):
             config.should_retry_exception(AssertionError)

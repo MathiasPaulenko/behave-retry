@@ -64,8 +64,8 @@ class FakeContext:
 class FakeRunner:
     """Mimics behave runner for patch tests."""
 
-    def __init__(self):
-        self.context = FakeContext()
+    def __init__(self, context=None):
+        self.context = context if context is not None else FakeContext()
 
 
 class TestSetupRetry:
@@ -374,7 +374,7 @@ class TestPatchScenarioRun:
             _patch_scenario_run(ctx)
 
             s = FakeScenario("Login", status="failed")
-            result = mock_scenario.run(s, FakeRunner())
+            result = mock_scenario.run(s, FakeRunner(ctx))
 
         assert result is False
         assert call_count == 2
@@ -403,7 +403,7 @@ class TestPatchScenarioRun:
             _patch_scenario_run(ctx)
 
             s = FakeScenario("Login", status="failed")
-            result = mock_scenario.run(s, FakeRunner())
+            result = mock_scenario.run(s, FakeRunner(ctx))
 
         assert result is True
         assert call_count == 3
@@ -432,7 +432,7 @@ class TestPatchScenarioRun:
             _patch_scenario_run(ctx)
 
             s = FakeScenario("Login", tags=["@retry:0"], status="failed")
-            result = mock_scenario.run(s, FakeRunner())
+            result = mock_scenario.run(s, FakeRunner(ctx))
 
         assert result is True
         assert call_count == 1
@@ -457,7 +457,7 @@ class TestPatchScenarioRun:
             _patch_scenario_run(ctx)
 
             s = FakeScenario("Login", tags=["@smoke"], status="failed")
-            result = mock_scenario.run(s, FakeRunner())
+            result = mock_scenario.run(s, FakeRunner(ctx))
 
         assert result is True
         assert call_count == 1
@@ -483,7 +483,7 @@ class TestPatchScenarioRun:
             _patch_scenario_run(ctx)
 
             s = FakeScenario("Login", status="failed")
-            result = mock_scenario.run(s, FakeRunner())
+            result = mock_scenario.run(s, FakeRunner(ctx))
 
         assert result is True
         assert call_count == 1
@@ -513,7 +513,7 @@ class TestPatchScenarioRun:
             _patch_scenario_run(ctx)
 
             s = FakeScenario("Login", status="failed")
-            result = mock_scenario.run(s, FakeRunner())
+            result = mock_scenario.run(s, FakeRunner(ctx))
 
         assert result is False
         assert call_count == 2
@@ -534,7 +534,7 @@ class TestPatchScenarioRun:
             _patch_scenario_run(ctx)
 
             s = FakeScenario("Login", status="passed")
-            result = mock_scenario.run(s, FakeRunner())
+            result = mock_scenario.run(s, FakeRunner(ctx))
 
         assert result is False
         assert len(ctx._behave_retry_stats.scenarios_retried) == 0
@@ -565,7 +565,7 @@ class TestRetryDelay:
             _patch_scenario_run(ctx)
 
             s = FakeScenario("Login", status="failed")
-            mock_scenario.run(s, FakeRunner())
+            mock_scenario.run(s, FakeRunner(ctx))
 
         mock_sleep.assert_not_called()
 
@@ -591,7 +591,7 @@ class TestRetryDelay:
             _patch_scenario_run(ctx)
 
             s = FakeScenario("Login", status="failed")
-            mock_scenario.run(s, FakeRunner())
+            mock_scenario.run(s, FakeRunner(ctx))
 
         sleep_calls = [c.args[0] for c in mock_sleep.call_args_list]
         assert sleep_calls == [1.0, 1.0]
@@ -618,7 +618,7 @@ class TestRetryDelay:
             _patch_scenario_run(ctx)
 
             s = FakeScenario("Login", status="failed")
-            mock_scenario.run(s, FakeRunner())
+            mock_scenario.run(s, FakeRunner(ctx))
 
         sleep_calls = [c.args[0] for c in mock_sleep.call_args_list]
         assert sleep_calls == [0.5, 1.0, 2.0]
@@ -648,7 +648,7 @@ class TestRetryDelay:
             _patch_scenario_run(ctx)
 
             s = FakeScenario("Login", status="failed")
-            mock_scenario.run(s, FakeRunner())
+            mock_scenario.run(s, FakeRunner(ctx))
 
         mock_sleep.assert_called_once_with(2.0)
 
@@ -685,7 +685,7 @@ class TestOnRetryCallback:
             _patch_scenario_run(ctx)
 
             s = FakeScenario("Login", status="failed")
-            mock_scenario.run(s, FakeRunner())
+            mock_scenario.run(s, FakeRunner(ctx))
 
         assert len(callback_calls) == 1
         assert callback_calls[0][0] is ctx
@@ -717,7 +717,7 @@ class TestOnRetryCallback:
             _patch_scenario_run(ctx)
 
             s = FakeScenario("Login", status="failed")
-            mock_scenario.run(s, FakeRunner())
+            mock_scenario.run(s, FakeRunner(ctx))
 
         assert callback_calls == [1, 2, 3]
 
@@ -745,7 +745,7 @@ class TestOnRetryCallback:
             _patch_scenario_run(ctx)
 
             s = FakeScenario("Login", status="failed")
-            mock_scenario.run(s, FakeRunner())
+            mock_scenario.run(s, FakeRunner(ctx))
 
         assert callback_calls == []
 
@@ -769,7 +769,7 @@ class TestOnRetryCallback:
             _patch_scenario_run(ctx)
 
             s = FakeScenario("Login", status="passed")
-            mock_scenario.run(s, FakeRunner())
+            mock_scenario.run(s, FakeRunner(ctx))
 
         assert callback_calls == []
 
@@ -798,7 +798,7 @@ class TestOnRetryCallback:
             _patch_scenario_run(ctx)
 
             s = FakeScenario("Login", status="failed")
-            mock_scenario.run(s, FakeRunner())
+            mock_scenario.run(s, FakeRunner(ctx))
 
         assert received_exceptions == [None, None]
 
@@ -832,7 +832,7 @@ class TestOnRetryCallback:
             _patch_scenario_run(ctx)
 
             s = FakeScenario("Login", status="failed")
-            mock_scenario.run(s, FakeRunner())
+            mock_scenario.run(s, FakeRunner(ctx))
 
         assert call_order == ["callback", "sleep"]
 
@@ -897,7 +897,7 @@ class TestFeatureTagInheritance:
             _patch_scenario_run(ctx)
 
             s = FakeScenario("Login", status="failed", feature=feature)
-            mock_scenario.run(s, FakeRunner())
+            mock_scenario.run(s, FakeRunner(ctx))
 
         assert call_count == 3
 
@@ -921,7 +921,7 @@ class TestFeatureTagInheritance:
             _patch_scenario_run(ctx)
 
             s = FakeScenario("Login", tags=["@retry:1"], status="failed", feature=feature)
-            mock_scenario.run(s, FakeRunner())
+            mock_scenario.run(s, FakeRunner(ctx))
 
         assert call_count == 2
 
@@ -945,7 +945,7 @@ class TestFeatureTagInheritance:
             _patch_scenario_run(ctx)
 
             s = FakeScenario("Login", tags=["@retry:0"], status="failed", feature=feature)
-            mock_scenario.run(s, FakeRunner())
+            mock_scenario.run(s, FakeRunner(ctx))
 
         assert call_count == 1
 
@@ -972,7 +972,7 @@ class TestFeatureTagInheritance:
             _patch_scenario_run(ctx)
 
             s = FakeScenario("Login", status="failed", feature=feature)
-            mock_scenario.run(s, FakeRunner())
+            mock_scenario.run(s, FakeRunner(ctx))
 
         assert call_count == 2
 
@@ -999,9 +999,9 @@ class TestMaxTotalRetries:
             _patch_scenario_run(ctx)
 
             s1 = FakeScenario("A", status="failed")
-            mock_scenario.run(s1, FakeRunner())
+            mock_scenario.run(s1, FakeRunner(ctx))
             s2 = FakeScenario("B", status="failed")
-            mock_scenario.run(s2, FakeRunner())
+            mock_scenario.run(s2, FakeRunner(ctx))
 
         assert call_count == 4
 
@@ -1024,9 +1024,9 @@ class TestMaxTotalRetries:
             _patch_scenario_run(ctx)
 
             s1 = FakeScenario("A", status="failed")
-            mock_scenario.run(s1, FakeRunner())
+            mock_scenario.run(s1, FakeRunner(ctx))
             s2 = FakeScenario("B", status="failed")
-            mock_scenario.run(s2, FakeRunner())
+            mock_scenario.run(s2, FakeRunner(ctx))
 
         assert call_count == 6
 
@@ -1049,7 +1049,7 @@ class TestMaxTotalRetries:
             _patch_scenario_run(ctx)
 
             s = FakeScenario("A", status="failed")
-            mock_scenario.run(s, FakeRunner())
+            mock_scenario.run(s, FakeRunner(ctx))
 
         assert call_count == 1
 
@@ -1072,7 +1072,7 @@ class TestMaxTotalRetries:
             _patch_scenario_run(ctx)
 
             s = FakeScenario("A", status="failed")
-            result = mock_scenario.run(s, FakeRunner())
+            result = mock_scenario.run(s, FakeRunner(ctx))
 
         assert result is True
         assert call_count == 1
@@ -1099,7 +1099,7 @@ class TestMaxTotalRetries:
 
             for name in ("A", "B", "C", "D"):
                 s = FakeScenario(name, status="failed")
-                mock_scenario.run(s, FakeRunner())
+                mock_scenario.run(s, FakeRunner(ctx))
 
         assert call_count == 7
 
@@ -1122,7 +1122,7 @@ class TestMaxTotalRetries:
             _patch_scenario_run(ctx)
 
             s = FakeScenario("A", status="failed")
-            mock_scenario.run(s, FakeRunner())
+            mock_scenario.run(s, FakeRunner(ctx))
 
         assert call_count == 1
         assert ctx._behave_retry_total == 0
@@ -1169,7 +1169,7 @@ class TestLogging:
             _patch_scenario_run(ctx)
 
             s = FakeScenario("Login", status="failed")
-            mock_scenario.run(s, FakeRunner())
+            mock_scenario.run(s, FakeRunner(ctx))
 
         retry_logs = [r for r in caplog.records if "Retrying" in r.message]
         assert len(retry_logs) == 1
@@ -1195,7 +1195,7 @@ class TestLogging:
 
             s = FakeScenario("Failing", status="failed")
             s.steps = [FakeStep(status="failed", error=ValueError("boom"))]
-            mock_scenario.run(s, FakeRunner())
+            mock_scenario.run(s, FakeRunner(ctx))
 
         retry_logs = [r for r in caplog.records if "Retrying" in r.message]
         assert len(retry_logs) == 1
@@ -1219,7 +1219,7 @@ class TestLogging:
             _patch_scenario_run(ctx)
 
             s = FakeScenario("Passing", status="passed")
-            mock_scenario.run(s, FakeRunner())
+            mock_scenario.run(s, FakeRunner(ctx))
 
         retry_logs = [r for r in caplog.records if "Retrying" in r.message]
         assert len(retry_logs) == 0
@@ -1300,12 +1300,12 @@ class TestScenarioOutlineKey:
             s1 = FakeScenario("Login with admin", status="failed")
             s1.filename = "features/login.feature"
             s1.line = 10
-            mock_scenario.run(s1, FakeRunner())
+            mock_scenario.run(s1, FakeRunner(ctx))
 
             s2 = FakeScenario("Login with guest", status="failed")
             s2.filename = "features/login.feature"
             s2.line = 10
-            mock_scenario.run(s2, FakeRunner())
+            mock_scenario.run(s2, FakeRunner(ctx))
 
         assert call_counts["Login with admin"] == 2
         assert call_counts["Login with guest"] == 2

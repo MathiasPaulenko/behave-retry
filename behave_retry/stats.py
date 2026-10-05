@@ -14,7 +14,7 @@ class ScenarioRetry:
         attempts: Total number of execution attempts (1 = no retry).
         final_status: The final status: ``"passed"`` or ``"failed"``.
         exceptions: List of exception class names encountered.
-        key: Optional unique key (``filename:line``) to prevent collisions.
+        key: Optional unique key (``filename:line:name``) to prevent collisions.
     """
 
     scenario: str
@@ -38,13 +38,14 @@ class ScenarioRetry:
 
         Returns:
             A dictionary with scenario, attempts, final_status,
-            exceptions, was_retried, and passed_on_retry keys.
+            exceptions, key, was_retried, and passed_on_retry keys.
         """
         return {
             "scenario": self.scenario,
             "attempts": self.attempts,
             "final_status": self.final_status,
             "exceptions": list(self.exceptions),
+            "key": self.key,
             "was_retried": self.was_retried,
             "passed_on_retry": self.passed_on_retry,
         }
@@ -91,7 +92,7 @@ class RetryStats:
             exceptions: List of exception class names, or ``None``.
             key: Optional unique key for collision prevention.
         """
-        self.total_retries += attempts - 1
+        self.total_retries += max(0, attempts - 1)
         self.scenarios_retried.append(
             ScenarioRetry(
                 scenario=scenario,
@@ -129,11 +130,11 @@ class RetryStats:
         for s in self.scenarios_retried:
             s_key = s.key if s.key is not None else s.scenario
             if s_key == match_key:
-                self.total_retries -= s.attempts - 1
+                self.total_retries -= max(0, s.attempts - 1)
                 s.attempts = attempts
                 s.final_status = final_status
                 s.exceptions = exceptions or []
-                self.total_retries += attempts - 1
+                self.total_retries += max(0, attempts - 1)
                 return
         self.add_retry(scenario, attempts, final_status, exceptions, key=key)
 
