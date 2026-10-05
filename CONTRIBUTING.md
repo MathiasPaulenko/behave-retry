@@ -133,7 +133,7 @@ and describe:
 
 Releases are automated through GitHub Actions:
 
-1. Update `version` in `pyproject.toml` and `__version__` in `__init__.py`.
+1. Update `version` in `pyproject.toml`, `__version__` in `behave_retry/__init__.py`, and `release` in `docs/conf.py`.
 2. Update `CHANGELOG.md` with the new version and date.
 3. Tag the commit: `git tag v1.x.x`.
 4. Push the tag: `git push origin v1.x.x`.

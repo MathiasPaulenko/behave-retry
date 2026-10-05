@@ -240,9 +240,10 @@ For CI/CD integration, export stats as JSON:
 
 ```python
 import json
+from behave_retry import get_stats
 
 def after_all(context):
-    stats = getattr(context, "_behave_retry_stats", None)
+    stats = get_stats(context)
     if stats:
         with open("retry_report.json", "w") as f:
             json.dump(stats.to_dict(), f, indent=2)
@@ -252,7 +253,7 @@ See {doc}`api/RetryStats` and {doc}`api/ScenarioRetry` for the full API.
 
 ## Scenario Outline support
 
-Scenario Outline examples are uniquely identified by `filename:line:name`, preventing key collisions between examples that share the same file and line but have different names after placeholder substitution.
+Scenario Outline examples are uniquely identified by `filename:line:name` — Behave assigns each example the line of its `Examples` row, and the substituted name is appended for readability.
 
 ```gherkin
 Scenario Outline: Login with <user>
@@ -276,7 +277,15 @@ All features can be combined. The retry decision flow for a failed scenario is:
 1. **Retry count check** — `max_for_scenario == 0`? → no retry
 2. **Tag filter check** — `retry_tags` set and scenario doesn't match? → no retry
 3. **Run scenario** — if it passes, done
-4. **Exception filter check** — `retry_on` set and exception doesn't match? → no retry, fail
-5. **Retry limit check** — `attempt > max_for_scenario`? → no retry, fail
-6. **Budget check** — `max_total_retries` set and budget exhausted? → no retry, fail
-7. **Retry** — increment budget, call `on_retry`, sleep `delay`, reset state, go to step 3
+4. **Unrunnable step check** — scenario has `undefined` or `pending` steps? → no retry, fail
+5. **Exception filter check** — `retry_on` set and exception doesn't match? → no retry, fail
+6. **Retry limit check** — `attempt > max_for_scenario`? → no retry, fail
+7. **Budget check** — `max_total_retries` set and budget exhausted? → no retry, fail
+8. **Retry** — increment budget, call `on_retry`, sleep `delay`, reset state, go to step 3
+
+## Known limitations
+
+- **Reports show only the final attempt** — formatters are suppressed during retries and the final scenario state is emitted once, so each scenario appears a single time in `pretty`/`json`/`junit` reports. Intermediate failed attempts do not appear in reports (they are still logged by the `behave_retry` logger).
+- **Scenario hooks run per attempt** — `before_scenario` and `after_scenario` execute inside `Scenario.run`, so they run on every retry (fresh setup/teardown each attempt). Keep expensive setup lean, or gate it if it should only run once.
+- **Undefined and pending steps are never retried** — they cannot change outcome on a re-run.
+- **Failures in `before_scenario` hooks** — a scenario that fails in a hook (before any step runs) is retried only when `retry_on` is empty; no step exception exists to match against.

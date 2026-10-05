@@ -22,7 +22,7 @@ Behave has no built-in retry. When a scenario fails due to flakiness (timing, ne
 | Feature | behave-retry | Cucumber `--retry` | pytest-rerunfailures |
 |---|---|---|---|
 | Per-scenario retry override | `@retry:N` tag | `@retry N` tag | `@pytest.mark.flaky(reruns=N)` |
-| Exception filtering | `retry_on=[...]` | No | `reruns_exceptions` |
+| Exception filtering | `retry_on=[...]` | No | `only_rerun`/`reruns_except` |
 | Tag filtering | `retry_tags=["@flaky"]` | No | No |
 | Global retry budget | `max_total_retries` | No | No |
 | Exponential backoff | `retry_delay` + `backoff_factor` | No | `reruns_delay` (fixed) |
@@ -122,6 +122,8 @@ Explicit arguments always win. If you call `setup_retry(context, max_retries=5)`
    - Is the global retry budget exhausted? (if `max_total_retries` is set)
 3. If all checks pass, it resets the scenario state and re-runs it.
 4. Stats are tracked and available via `retry_report()` or `stats.to_dict()`.
+
+**Note:** `before_scenario`/`after_scenario` hooks run per attempt, and formatter output only shows the final attempt. See [Known limitations](https://mathiaspaulenko.github.io/behave-retry/features/#known-limitations).
 
 ## Documentation
 

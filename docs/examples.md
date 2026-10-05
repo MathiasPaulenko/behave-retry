@@ -188,14 +188,14 @@ Export retry stats as JSON for CI/CD pipelines:
 
 ```python
 import json
-from behave_retry import retry_report
+from behave_retry import get_stats, retry_report
 
 def after_all(context):
     # Print human-readable summary
     print(retry_report(context))
 
     # Export machine-readable stats
-    stats = getattr(context, "_behave_retry_stats", None)
+    stats = get_stats(context)
     if stats:
         with open("retry_report.json", "w") as f:
             json.dump(stats.to_dict(), f, indent=2)
@@ -212,6 +212,7 @@ The JSON output looks like:
       "attempts": 3,
       "final_status": "failed",
       "exceptions": ["AssertionError"],
+      "key": "features/login.feature:7:Login with invalid credentials",
       "was_retried": true,
       "passed_on_retry": false
     },
@@ -220,6 +221,7 @@ The JSON output looks like:
       "attempts": 2,
       "final_status": "passed",
       "exceptions": ["TimeoutError"],
+      "key": "features/login.feature:12:Search products",
       "was_retried": true,
       "passed_on_retry": true
     }

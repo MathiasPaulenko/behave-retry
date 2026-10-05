@@ -216,7 +216,7 @@ Zero required dependencies. `behave` is only needed as a dev dependency for runn
 
 ## Type checking
 
-behave-retry ships with a `py.typed` marker (since v1.8.0), enabling type checkers like mypy and pyright to recognize type information:
+behave-retry ships with a `py.typed` marker (since v1.3.0), enabling type checkers like mypy and pyright to recognize type information:
 
 ```python
 from behave_retry import RetryConfig, RetryStats

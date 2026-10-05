@@ -29,6 +29,7 @@ how_it_works
 
 api/setup_retry
 api/after_scenario_hook
+api/get_stats
 api/retry_report
 api/RetryConfig
 api/RetryStats

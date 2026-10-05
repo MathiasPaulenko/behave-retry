@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path("..").resolve()))
 
 project = "behave-retry"
 author = "Mathias Paulenko"
-release = "1.8.4"
+release = "1.9.0"
 
 extensions = [
     "sphinx.ext.autodoc",
@@ -19,7 +19,6 @@ extensions = [
     "myst_parser",
 ]
 
-templates_path = ["_templates"]
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 html_theme = "furo"

@@ -44,6 +44,10 @@ Called in `before_all`. This function:
 
 Called by behave for every scenario. This is where the retry loop lives.
 
+The wrapper resolves the live context from `runner.context` (falling back to the context captured when the patch was applied). This matters if behave runs more than once in the same process: each run creates a fresh `Context`, and a patch bound permanently to the first context would reuse stale config and stats from the previous run.
+
+Every attempt runs with `runner.formatters` temporarily emptied (formatters would otherwise re-emit the scenario and its steps on each attempt, duplicating report entries). After the last attempt, `_emit_scenario_result` replays the standard event sequence — `scenario()`, `step()` for each step, `match()` + `result()` for each executed step — so reports contain a single entry per scenario with the final outcome. The step match is re-resolved via `runner.step_registry.find_match(step)` because behave does not store it on the step.
+
 #### Step-by-step flow
 
 ```
@@ -57,12 +61,14 @@ patched_run(scenario, runner)
 ├─ attempt = 0
 └─ loop:
      ├─ attempt += 1
-     ├─ result = original_run(scenario, runner)
+     ├─ result = original_run(scenario, runner)   ← formatters suppressed
      ├─ store attempt count on context
      │
-     ├─ passed? → record stats (if attempt > 1), return False
+     ├─ passed? → record stats (if attempt > 1), emit final state, return False
      │
      ├─ failed:
+     │   ├─ undefined/pending step? → emit final state, return True
+     │   │
      │   ├─ check retry_on filter
      │   │   └─ exception doesn't match? → record stats, return True
      │   │
@@ -78,6 +84,8 @@ patched_run(scenario, runner)
      │   ├─ sleep(delay)
      │   ├─ reset scenario state
      │   └─ continue loop
+     │
+     └─ on exit: _emit_scenario_result(scenario, runner) — one entry, final state
 ```
 
 ### 3. Scenario state reset
@@ -96,9 +104,9 @@ This ensures the scenario starts fresh on each retry — behave won't skip steps
 
 Called in `after_scenario`. With the patched `Scenario.run`, the retry loop is handled automatically. This hook is kept for backward compatibility and tracks the attempt count on the context for scenarios that were never retried (ensuring every scenario has an entry in `_behave_retry_attempts`).
 
-### 5. `retry_report(context)`
+### 5. `retry_report(context)` and `get_stats(context)`
 
-Called in `after_all`. Reads `_behave_retry_stats` from the context and returns a formatted summary string. Also logs the summary at INFO level.
+Called in `after_all`. `retry_report` returns a formatted summary string and logs it at INFO level. `get_stats` returns the `RetryStats` object (or `None`) for programmatic access — e.g. `get_stats(context).to_dict()` for JSON reports.
 
 ## Scenario key generation
 
@@ -111,7 +119,7 @@ Each scenario is identified by a unique key stored in `_behave_retry_attempts` a
 | Only `name` available | `name` | `Login with bob` |
 | Nothing available | `str(scenario)` | `<Scenario object at 0x...>` |
 
-Including the name prevents key collisions between Scenario Outline examples that share the same file and line but have different names after placeholder substitution.
+Behave assigns each Scenario Outline example the line of its `Examples` row, so `filename:line` is already unique per example; the name is appended for readability and as a guard for scenarios without line information.
 
 ## Exception extraction
 
@@ -120,14 +128,20 @@ When a scenario fails, behave-retry needs to determine what exception caused the
 - **`_get_last_exception(scenario)`** — iterates steps in reverse, finds the last failed step with an exception, and returns the exception instance.
 - **`_get_last_exception_type(scenario)`** — returns `type(exception)` or `None`.
 
+Both helpers scan `scenario.all_steps`, which includes the per-scenario copies of Background steps — a failure in a `Background` block is therefore visible to `retry_on` filtering.
+
 Behave assigns `Status.failed` to `AssertionError` and `Status.error` to other exceptions. Both are treated as failures by `_step_failed`.
 
 ## Idempotency
 
 `_patch_scenario_run` checks for the `_behave_retry_patched` attribute on the original `Scenario.run`. If already patched, it returns immediately. This means calling `setup_retry` multiple times is safe — the second call updates the config on the context but doesn't re-patch.
 
-However, the closure in `patched_run` reads config dynamically via `getattr(context, "_behave_retry_config")`, so the latest config is always used.
+The closure in `patched_run` reads config dynamically from `runner.context` at call time, so the latest config is always used — even across multiple behave runs in the same process.
 
 ## Thread safety
 
 Behave runs scenarios sequentially in a single thread. behave-retry is not designed for concurrent scenario execution and does not use any locking. This is consistent with behave's own execution model.
+
+## Limitations
+
+See {doc}`features` → *Known limitations*. Notably, `before_scenario`/`after_scenario` hooks run per attempt, and formatter output only reflects the final attempt (intermediate attempts are suppressed).

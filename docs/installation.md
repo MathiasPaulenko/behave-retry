@@ -48,9 +48,12 @@ print(behave_retry.__version__)
 
 ## Troubleshooting
 
-### `ImportError: No module named behave`
+### Retry silently disabled
 
-`behave` is not a runtime dependency of `behave-retry`. Install it separately:
+If `behave` is not installed, `setup_retry` logs a warning
+(`behave is not installed; retry is disabled`) and scenarios run without
+retry. `behave` is not a runtime dependency of `behave-retry` — install it
+separately:
 
 ```bash
 pip install behave
@@ -72,7 +75,7 @@ setup_retry(context, retry_tags=["flaky"])
 
 ### `py.typed` not found
 
-If your type checker doesn't recognize `behave-retry` types, ensure you're using version 1.8.0+ which includes the `py.typed` marker. Upgrade with:
+If your type checker doesn't recognize `behave-retry` types, ensure you're using version 1.3.0+ which includes the `py.typed` marker. Upgrade with:
 
 ```bash
 pip install --upgrade behave-retry

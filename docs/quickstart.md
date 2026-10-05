@@ -30,6 +30,7 @@ def after_all(context):
 | `setup_retry` | `before_all` | Patches `Scenario.run` with retry logic, stores config on context |
 | `after_scenario_hook` | `after_scenario` | Tracks attempt count for backward compatibility |
 | `retry_report` | `after_all` | Returns a human-readable summary string of retry stats |
+| `get_stats` | `after_all` | Returns the `RetryStats` object (for `to_dict()` / JSON export) |
 
 ## 3. Run your tests
 
@@ -58,6 +59,7 @@ Retry Summary:
    - Is the scenario tagged for retry? (if `retry_tags` is set)
    - Is the exception type eligible? (if `retry_on` is set)
    - Is the global retry budget exhausted? (if `max_total_retries` is set)
+   - Does it have `undefined`/`pending` steps? (those are never retried)
 3. If all checks pass, it resets the scenario state (step statuses, exceptions, error messages) and re-runs it.
 4. The retry loop continues until the scenario passes or no more retries remain.
 5. Stats are tracked on the context and can be printed with `retry_report`.
