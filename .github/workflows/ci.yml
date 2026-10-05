@@ -25,6 +25,6 @@ jobs:
       - run: pytest tests/ -v --cov --cov-report=xml
       - uses: codecov/codecov-action@v4
         if: matrix.python-version == '3.12'
+        continue-on-error: true
         with:
           file: ./coverage.xml
-          fail_ci_if_error: false
