@@ -2,6 +2,37 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.0] - 2026-10-05
+
+### Added
+
+- `get_stats(context)` — public API to access `RetryStats` programmatically instead of reading the private `context._behave_retry_stats`
+- `key` field in `ScenarioRetry.to_dict()` output
+
+### Fixed
+
+- Retried scenarios no longer appear duplicated in behave formatter output — all attempts run with formatters suppressed and the final scenario state is emitted once (`pretty`, `json`, `junit`, custom formatters)
+- `retry_on` filtering and exception reporting now see `Background` step failures — helpers scan `scenario.all_steps` instead of `scenario.steps`
+- `patched_run` resolves the live context from `runner.context` — a second behave run in the same process no longer reuses stale config/stats from the first
+- Scenarios with `undefined` or `pending` steps are no longer retried — they can never pass on re-run
+- `on_retry` callback exceptions are logged instead of aborting the whole test run
+- `_behave_retry_attempts` tracking is guarded when the attribute is missing
+- Invalid environment variable values raise a `ValueError` naming the variable instead of a bare parse error
+- `retry_tags` now also matches rule-level tags via `scenario.effective_tags`
+- `setup_retry` logs a warning when `behave` is not installed instead of silently disabling retry
+- `total_retries` is clamped to `>= 0` when `attempts` is 0 or negative
+
+### Changed
+
+- Docs: corrected `py.typed` availability (since 1.3.0, not 1.8.0), the Scenario Outline key justification, the missing-`behave` troubleshooting entry, and the pytest-rerunfailures exception-filter names in the README comparison table
+- Docs: added "Known limitations" — `before_scenario`/`after_scenario` hooks run per attempt, and formatter output only reflects the final attempt
+- CI: PyPI publish failures are no longer masked (`continue-on-error` removed); Codecov upload is non-blocking
+- CONTRIBUTING: `docs/conf.py` `release` added to the release-process version list
+
+### Removed
+
+- Unused duplicate `tests/integration/features/filtering.feature`
+
 ## [1.8.4] - 2026-08-08
 
 ### Added
@@ -18,6 +49,12 @@ All notable changes to this project will be documented in this file.
 
 - `setup_retry()` default values for numeric parameters changed to `None`.
 - README and docs updated with environment variable configuration guide and examples.
+
+## [1.8.3] - 2026-08-06
+
+### Fixed
+
+- Added author email to package metadata.
 
 ## [1.8.2] - 2026-07-13
 
