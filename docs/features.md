@@ -110,7 +110,7 @@ Feature: Flaky scenarios
     ...
 ```
 
-Scenario-level tags always take precedence over Feature-level tags. See {doc}`configuration` for the full precedence rules.
+Scenario-level tags always take precedence. On behave 1.3+, `@retry:N` on a `Rule:` block applies to the scenarios inside it — more specific than the Feature tag, less specific than the scenario's own tag. See {doc}`configuration` for the full precedence rules.
 
 ## Global retry budget
 

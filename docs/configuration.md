@@ -95,23 +95,37 @@ config = RetryConfig(
 
 ### Validation
 
-`RetryConfig` raises `ValueError` on invalid inputs:
+`RetryConfig` raises `ValueError` on out-of-range values and `TypeError`
+on wrong types:
 
-| Condition | Error message |
+| Condition | Error |
 |---|---|
-| `max_retries < 0` | `max_retries must be >= 0, got N` |
-| `retry_delay < 0` | `retry_delay must be >= 0, got N` |
-| `backoff_factor < 1.0` | `backoff_factor must be >= 1.0, got N` |
-| `max_total_retries < 0` (when not `None`) | `max_total_retries must be >= 0 or None, got N` |
+| `max_retries < 0` | `ValueError: max_retries must be >= 0, got N` |
+| `max_retries` not an `int` (incl. `bool`, `float`, `str`) | `TypeError` |
+| `retry_delay < 0` | `ValueError: retry_delay must be >= 0, got N` |
+| `retry_delay` non-numeric | `TypeError` |
+| `retry_delay` = `inf`/`nan` | `ValueError` |
+| `backoff_factor < 1.0` | `ValueError: backoff_factor must be >= 1.0, got N` |
+| `backoff_factor` non-numeric or `inf`/`nan` | `TypeError`/`ValueError` |
+| `max_total_retries < 0` (when not `None`) | `ValueError` |
+| `max_total_retries` not `int`/`None` | `TypeError` |
+| `retry_tags` a string, non-iterable, or with non-string entries | `TypeError` |
+| `retry_on` entries neither exception classes nor strings | `TypeError` |
+| `on_retry` not callable | `TypeError` |
 
 ```python
 from behave_retry import RetryConfig
 
 RetryConfig(max_retries=-1)  # raises ValueError
+RetryConfig(max_retries="3")  # raises TypeError
 RetryConfig(retry_delay=-1.0)  # raises ValueError
+RetryConfig(retry_tags="flaky")  # raises TypeError
 RetryConfig(backoff_factor=0.5)  # raises ValueError
 RetryConfig(max_total_retries=-5)  # raises ValueError
 ```
+
+`retry_tags` and `retry_on` are normalized to lists on construction, so
+generators and tuples are accepted and stay reusable.
 
 Since `RetryConfig` is frozen, attempting to modify an attribute raises `AttributeError`:
 
@@ -125,8 +139,9 @@ config.max_retries = 5  # raises AttributeError
 The `@retry:N` tag is resolved in this order:
 
 1. **Scenario-level** `@retry:N` tag — highest priority
-2. **Feature-level** `@retry:N` tag — fallback if scenario has none
-3. **Global** `max_retries` from `RetryConfig` — default
+2. **Rule-level** `@retry:N` tag (behave 1.3+ `Rule:` blocks) — fallback
+3. **Feature-level** `@retry:N` tag — fallback if scenario has none
+4. **Global** `max_retries` from `RetryConfig` — default
 
 ```
 @retry:3          ← Feature-level
@@ -158,7 +173,10 @@ Scenario: X  # retry:3 wins, retry:5 is ignored
 
 ## Exception filter resolution
 
-String entries in `retry_on` are resolved to exception classes on first use and cached for subsequent calls:
+String entries in `retry_on` are resolved to exception classes and cached.
+When configured via `setup_retry`, resolution happens eagerly at setup so
+invalid names fail fast; when using `RetryConfig` directly, resolution is
+lazy and cached on first use:
 
 - **Bare names** (`"AssertionError"`) — looked up in `builtins`
 - **Dotted paths** (`"mymod.MyError"`) — split into module path and class name, imported via `importlib`
@@ -186,8 +204,11 @@ setup_retry(context, retry_on=[TimeoutError])
 
 ### Error handling
 
-- If a string cannot be resolved to an exception class, `ImportError` is raised on first use (not at config time).
-- If an entry is neither a class nor a string, `TypeError` is raised.
+- If a string cannot be resolved to an exception class, `ImportError` is
+  raised — at `setup_retry` time for the public API, or on first use for
+  directly constructed `RetryConfig` objects.
+- If an entry is neither a class nor a string, `TypeError` is raised at
+  construction.
 
 ## Retry delay calculation
 

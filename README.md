@@ -61,7 +61,7 @@ That's it. Failed scenarios will now be re-executed up to 3 times automatically.
 - **Tag-filtered retry** — only retry scenarios with specific tags (`@flaky`)
 - **Exception-filtered retry** — only retry on specific exception types or string names
 - **Per-scenario override** — `@retry:N` tag overrides global config
-- **Feature-level tags** — `@retry:N` on Feature inherits to scenarios
+- **Feature-level tags** — `@retry:N` on Feature or `Rule:` blocks inherits to scenarios
 - **Global retry budget** — limit total retries across all scenarios
 - **Retry delay and backoff** — configurable delay with exponential backoff
 - **On-retry callback** — custom logic before each retry (cleanup, screenshots, etc.)

@@ -48,6 +48,8 @@ The wrapper resolves the live context from `runner.context` (falling back to the
 
 Every attempt runs with `runner.formatters` temporarily emptied (formatters would otherwise re-emit the scenario and its steps on each attempt, duplicating report entries). After the last attempt, `_emit_scenario_result` replays the standard event sequence — `scenario()`, `step()` for each step, `match()` + `result()` for each executed step — so reports contain a single entry per scenario with the final outcome. The step match is re-resolved via `runner.step_registry.find_match(step)` because behave does not store it on the step.
 
+The replay mirrors behave's own emission rules: it only happens when `scenario.should_run(runner.config)` is true or `--show-skipped` is active, so scenarios excluded by tag/name filters don't pollute reports. In `--dry-run` mode, behave emits `match()`/`result()` for steps that were never executed (left `untested`), and the replay does the same. If an attempt itself raises (e.g. `KeyboardInterrupt` inside a step), the partial scenario state is still emitted so formatters don't lose the scenario entirely.
+
 #### Step-by-step flow
 
 ```
@@ -85,7 +87,8 @@ patched_run(scenario, runner)
      │   ├─ reset scenario state
      │   └─ continue loop
      │
-     └─ on exit: _emit_scenario_result(scenario, runner) — one entry, final state
+     └─ on exit: if should_run or --show-skipped → emit final state once
+        (also emitted on propagating exceptions like KeyboardInterrupt)
 ```
 
 ### 3. Scenario state reset
