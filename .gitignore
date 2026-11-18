@@ -14,3 +14,4 @@ coverage.xml
 .ruff_cache/
 ref/
 docs/_build/
+nul

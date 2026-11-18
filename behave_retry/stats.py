@@ -131,6 +131,9 @@ class RetryStats:
             s_key = s.key if s.key is not None else s.scenario
             if s_key == match_key:
                 self.total_retries -= max(0, s.attempts - 1)
+                s.scenario = scenario
+                if key is not None:
+                    s.key = key
                 s.attempts = attempts
                 s.final_status = final_status
                 s.exceptions = exceptions or []

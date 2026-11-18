@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 import pytest
 
 from behave_retry import RetryConfig
@@ -221,3 +223,153 @@ class TestGetRetryDelay:
         assert config.get_retry_delay(1) == 0.1
         assert config.get_retry_delay(2) == 1.0
         assert config.get_retry_delay(3) == 10.0
+
+
+class TestRetryConfigTypeValidation:
+    def test_max_retries_str_raises(self):
+        with pytest.raises(TypeError, match="max_retries"):
+            RetryConfig(max_retries="3")
+
+    def test_max_retries_bool_raises(self):
+        with pytest.raises(TypeError, match="max_retries"):
+            RetryConfig(max_retries=True)
+
+    def test_max_retries_float_raises(self):
+        with pytest.raises(TypeError, match="max_retries"):
+            RetryConfig(max_retries=1.5)
+
+    def test_max_retries_none_raises(self):
+        with pytest.raises(TypeError, match="max_retries"):
+            RetryConfig(max_retries=None)
+
+    def test_retry_delay_str_raises(self):
+        with pytest.raises(TypeError, match="retry_delay"):
+            RetryConfig(max_retries=1, retry_delay="0.5")
+
+    def test_retry_delay_inf_raises(self):
+        with pytest.raises(ValueError, match="retry_delay"):
+            RetryConfig(max_retries=1, retry_delay=math.inf)
+
+    def test_retry_delay_nan_raises(self):
+        with pytest.raises(ValueError, match="retry_delay"):
+            RetryConfig(max_retries=1, retry_delay=math.nan)
+
+    def test_retry_delay_bool_raises(self):
+        with pytest.raises(TypeError, match="retry_delay"):
+            RetryConfig(max_retries=1, retry_delay=True)
+
+    def test_backoff_factor_str_raises(self):
+        with pytest.raises(TypeError, match="backoff_factor"):
+            RetryConfig(max_retries=1, backoff_factor="2")
+
+    def test_backoff_factor_inf_raises(self):
+        with pytest.raises(ValueError, match="backoff_factor"):
+            RetryConfig(max_retries=1, backoff_factor=math.inf)
+
+    def test_backoff_factor_nan_raises(self):
+        with pytest.raises(ValueError, match="backoff_factor"):
+            RetryConfig(max_retries=1, backoff_factor=math.nan)
+
+    def test_max_total_retries_str_raises(self):
+        with pytest.raises(TypeError, match="max_total_retries"):
+            RetryConfig(max_retries=1, max_total_retries="5")
+
+    def test_max_total_retries_bool_raises(self):
+        with pytest.raises(TypeError, match="max_total_retries"):
+            RetryConfig(max_retries=1, max_total_retries=False)
+
+    def test_retry_tags_string_raises(self):
+        with pytest.raises(TypeError, match="retry_tags"):
+            RetryConfig(max_retries=1, retry_tags="flaky")
+
+    def test_retry_tags_non_str_entry_raises(self):
+        with pytest.raises(TypeError, match="retry_tags"):
+            RetryConfig(max_retries=1, retry_tags=["flaky", 42])
+
+    def test_retry_tags_generator_normalized_to_list(self):
+        config = RetryConfig(max_retries=1, retry_tags=(t for t in ["a", "b"]))
+        assert config.retry_tags == ["a", "b"]
+
+    def test_retry_tags_tuple_normalized_to_list(self):
+        config = RetryConfig(max_retries=1, retry_tags=("a", "b"))
+        assert config.retry_tags == ["a", "b"]
+
+    def test_retry_on_string_raises(self):
+        with pytest.raises(TypeError, match="retry_on"):
+            RetryConfig(max_retries=1, retry_on="ValueError")
+
+    def test_retry_on_non_exception_class_raises(self):
+        with pytest.raises(TypeError, match="retry_on"):
+            RetryConfig(max_retries=1, retry_on=[int])
+
+    def test_retry_on_non_type_entry_raises(self):
+        with pytest.raises(TypeError, match="retry_on"):
+            RetryConfig(max_retries=1, retry_on=[42])
+
+    def test_retry_on_generator_normalized_to_list(self):
+        config = RetryConfig(
+            max_retries=1, retry_on=(e for e in [ValueError, "KeyError"])
+        )
+        assert config.retry_on == [ValueError, "KeyError"]
+
+    def test_on_retry_non_callable_raises(self):
+        with pytest.raises(TypeError, match="on_retry"):
+            RetryConfig(max_retries=1, on_retry="nope")
+
+    def test_retry_tags_non_iterable_raises(self):
+        with pytest.raises(TypeError, match="retry_tags"):
+            RetryConfig(max_retries=1, retry_tags=42)
+
+    def test_retry_on_non_iterable_raises(self):
+        with pytest.raises(TypeError, match="retry_on"):
+            RetryConfig(max_retries=1, retry_on=42)
+
+
+class TestRetryDelayOverflow:
+    def test_huge_backoff_returns_inf_not_overflow(self):
+        config = RetryConfig(max_retries=3, retry_delay=1.0, backoff_factor=2.0)
+        assert config.get_retry_delay(2000) == math.inf
+
+    def test_overflow_does_not_raise(self):
+        config = RetryConfig(max_retries=3, retry_delay=1.0, backoff_factor=1e10)
+        # Would raise OverflowError without the guard.
+        delay = config.get_retry_delay(500)
+        assert delay == math.inf
+
+
+class TestShouldRetryTagNonStr:
+    def test_non_str_tags_ignored(self):
+        config = RetryConfig(max_retries=1, retry_tags=["flaky"])
+        assert config.should_retry_tag([None, 42, b"flaky"]) is False
+
+    def test_non_str_tags_mixed_with_match(self):
+        config = RetryConfig(max_retries=1, retry_tags=["flaky"])
+        assert config.should_retry_tag([None, "flaky"]) is True
+
+
+class TestShouldRetryExceptionInstance:
+    def test_accepts_exception_instance(self):
+        config = RetryConfig(max_retries=1, retry_on=[ValueError])
+        assert config.should_retry_exception(ValueError("x")) is True
+
+    def test_instance_subclass_match(self):
+        config = RetryConfig(max_retries=1, retry_on=[Exception])
+        assert config.should_retry_exception(KeyError("k")) is True
+
+    def test_instance_no_match(self):
+        config = RetryConfig(max_retries=1, retry_on=[ValueError])
+        assert config.should_retry_exception(KeyError("k")) is False
+
+
+class TestParseRetryTagNonStr:
+    def test_none_entry_skipped(self):
+        assert parse_retry_tag([None, "@retry:2"]) == 2
+
+    def test_int_entry_skipped(self):
+        assert parse_retry_tag([5, "retry:3"]) == 3
+
+    def test_all_non_str_returns_none(self):
+        assert parse_retry_tag([None, 1, b"retry:9"]) is None
+
+    def test_non_iterable_returns_none(self):
+        assert parse_retry_tag(42) is None  # type: ignore[arg-type]

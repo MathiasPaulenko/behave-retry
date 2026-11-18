@@ -208,3 +208,33 @@ class TestRetryStatsEdge:
         assert stats.scenarios_retried[0].attempts == 4
         assert stats.scenarios_retried[0].final_status == "passed"
         assert stats.total_retries == 3
+
+
+class TestUpdateRetryStaleFields:
+    def test_update_by_name_refreshes_fields(self):
+        stats = RetryStats()
+        stats.add_retry("X", attempts=2, final_status="failed")
+        stats.update_retry("X", attempts=3, final_status="passed")
+        s = stats.scenarios_retried[0]
+        assert s.scenario == "X"
+        assert s.attempts == 3
+        assert s.final_status == "passed"
+        assert len(stats.scenarios_retried) == 1
+
+    def test_update_refreshes_key(self):
+        stats = RetryStats()
+        stats.add_retry("X", attempts=2, final_status="failed", key="f:1:X")
+        stats.update_retry("X", attempts=3, final_status="failed", key="f:1:X")
+        s = stats.scenarios_retried[0]
+        assert s.key == "f:1:X"
+        assert len(stats.scenarios_retried) == 1
+
+    def test_update_by_key_keeps_record_single(self):
+        stats = RetryStats()
+        stats.add_retry("X", attempts=2, final_status="failed", key="k1")
+        stats.update_retry("X renamed", attempts=3, final_status="passed", key="k1")
+        assert len(stats.scenarios_retried) == 1
+        s = stats.scenarios_retried[0]
+        assert s.scenario == "X renamed"
+        assert s.key == "k1"
+        assert s.final_status == "passed"

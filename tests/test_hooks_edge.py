@@ -1365,7 +1365,9 @@ class TestFormatterEmission:
         class NoFmt:
             pass
 
-        assert _run_quiet(fake_run, FakeScenario("X"), NoFmt()) is False
+        failed, suppressed = _run_quiet(fake_run, FakeScenario("X"), NoFmt())
+        assert failed is False
+        assert suppressed is False
         assert ran == [1]
 
     def test_run_quiet_restores_formatters(self):
@@ -1379,7 +1381,9 @@ class TestFormatterEmission:
             assert r.formatters == []
             return True
 
-        assert _run_quiet(fake_run, FakeScenario("X"), runner) is True
+        failed, suppressed = _run_quiet(fake_run, FakeScenario("X"), runner)
+        assert failed is True
+        assert suppressed is True
         assert runner.formatters == [fmt]
 
     def test_resolve_step_match_returns_match(self):

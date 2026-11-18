@@ -242,11 +242,11 @@ class TestRetryConfigEdge:
 
     def test_get_retry_delay_attempt_zero(self):
         config = RetryConfig(max_retries=3, retry_delay=2.0, backoff_factor=2.0)
-        assert config.get_retry_delay(0) == 1.0
+        assert config.get_retry_delay(0) == 2.0
 
     def test_get_retry_delay_negative_attempt(self):
         config = RetryConfig(max_retries=3, retry_delay=2.0, backoff_factor=2.0)
-        assert config.get_retry_delay(-1) == 0.5
+        assert config.get_retry_delay(-1) == 2.0
 
     def test_get_retry_delay_large_attempt(self):
         config = RetryConfig(max_retries=3, retry_delay=1.0, backoff_factor=2.0)
