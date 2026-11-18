@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.1] - 2026-11-18
+
+### Fixed
+
+- Final formatter replay now respects `scenario.should_run(config)` and `--show-skipped` — scenarios excluded by tag/name filters no longer appear in reports
+- `--dry-run` runs now emit `match()`/`result()` for resolved steps left `untested`, matching behave's native dry-run output
+- Formatter events are still emitted when an attempt raises (e.g. `KeyboardInterrupt`), so the scenario is not lost from reports
+- `_resolve_step_match` no longer propagates registry errors for unusual step types — falls back to `NoMatch`
+- Scenarios whose steps turn `undefined`/`pending` on a retry attempt are now recorded in stats
+- `runner.formatters` read-only runners run unsuppressed instead of crashing, and skip the duplicate replay
+- `time.sleep` overflow on extreme `retry_delay`/`backoff_factor` products logs a warning instead of aborting the run
+- `RetryConfig` validates parameter types and finiteness — `TypeError` for non-int `max_retries`, non-numeric delays, string `retry_tags`, invalid `retry_on` entries, non-callable `on_retry`; `ValueError` for `inf`/`nan` delays
+- `retry_on` string entries are resolved eagerly at `setup_retry` so config typos fail fast instead of mid-run
+- `update_retry` refreshes the stored scenario name/key on update
+- `get_retry_delay` clamps attempts below 1 and returns `math.inf` on float overflow instead of raising `OverflowError`
+- `parse_retry_tag`/`should_retry_tag` skip non-string entries and tolerate `None`/non-iterable inputs
+- `should_retry_exception` accepts exception instances in addition to classes
+- `@retry:N` on `Rule:` blocks (behave 1.3+) is honored — more specific than the feature-level tag
+
+### Changed
+
+- `retry_tags`/`retry_on` are normalized to lists at construction — generators and tuples stay reusable
+
 ## [1.9.0] - 2026-10-05
 
 ### Added
